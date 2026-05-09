@@ -77,13 +77,13 @@ Joint purchases pay at the higher applicable rate; mixed-couple first-matrimonia
 - **BSD** 1% / 2% / 3% / 4% / 5% / 6% (post-Feb 2023)
 - **ABSD** post-Apr 2023 rates per the table above; Solo/Joint buyer mode with per-buyer residency mix and ABSD remission checkbox for first matrimonial home
 - **Solo/Joint mode** — toggle between single buyer and joint purchase; each buyer's residency (SC / SPR / Foreigner) is configured separately
-- **ABSD remission** — mixed-couple (SC + SPR) first matrimonial home checkbox applies the SC rate
+- **ABSD remission** — first-matrimonial-home checkbox for a mixed-residency couple (SC + non-SC) applies the SC rate
 - **Auto-loan-optimization** — when income caps the loan below 75% LTV, cash & CPF substitute for the missing borrowing capacity, extending the maximum price beyond the simple `loan / ltv` cap.
 - **CPF-first deployment** for flexible portion (cpf-flex over cash-flex)
 - **Reverse calculation** that switches between modes:
   - Below max: shows actual deployment (no phantom shortfalls)
   - Above max: shows what's needed to leverage to max LTV (income surfaces first)
-- **Shareable link** — saves current inputs to URL query params for easy sharing
+- **Shareable link** — copies current inputs to a URL hash fragment (kept off origin servers since the payload contains income / CPF figures) for easy sharing
 
 ### Notes
 

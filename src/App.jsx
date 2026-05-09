@@ -322,6 +322,49 @@ function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, r
   return Math.max(r1, r2);
 }
 
+// Shareable link: encodes the current settings in a hash fragment so a
+// recipient sees the same scenario. Hash fragments are not sent to
+// origin servers, which matters because the payload includes income / CPF.
+const SHARE_PARAM = "s";
+
+const SHAREABLE_FIELDS = [
+  "age1", "income1", "age2", "income2",
+  "existingDebt", "cash", "cpf1", "cpf2",
+  "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
+  "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+];
+
+function encodeShareUrl(settings) {
+  const subset = {};
+  for (const k of SHAREABLE_FIELDS) {
+    if (settings[k] !== undefined) subset[k] = settings[k];
+  }
+  const blob = btoa(JSON.stringify(subset));
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#${SHARE_PARAM}=${blob}`;
+}
+
+function readShareFromHash() {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash || "";
+  const m = hash.match(new RegExp(`(?:^#|&)${SHARE_PARAM}=([^&]+)`));
+  if (!m) return null;
+  try {
+    const json = atob(decodeURIComponent(m[1]));
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearShareFromUrl() {
+  if (typeof window === "undefined" || !window.history?.replaceState) return;
+  const { pathname, search } = window.location;
+  window.history.replaceState(null, "", `${pathname}${search}`);
+}
+
 // ----- Main component -----
 
 const STORAGE_KEY = "private_property_affordability_v1";
@@ -381,6 +424,31 @@ export default function PrivatePropertyAffordabilityCalculator() {
     (async () => {
       try {
         if (typeof window === "undefined") {
+          if (!cancelled) setHydrated(true);
+          return;
+        }
+        const shared = readShareFromHash();
+        if (shared) {
+          if (typeof shared.age1 === "number") setAge1(shared.age1);
+          if (typeof shared.income1 === "number") setIncome1(shared.income1);
+          if (typeof shared.age2 === "number") setAge2(shared.age2);
+          if (typeof shared.income2 === "number") setIncome2(shared.income2);
+          if (typeof shared.existingDebt === "number") setExistingDebt(shared.existingDebt);
+          if (typeof shared.cash === "number") setCash(shared.cash);
+          if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
+          if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
+          if (typeof shared.tenure === "number") setTenure(shared.tenure);
+          if (typeof shared.propertyOrder === "string") setPropertyOrder(shared.propertyOrder);
+          if (typeof shared.stressRate === "number") setStressRate(shared.stressRate);
+          if (typeof shared.marketRate === "number") setMarketRate(shared.marketRate);
+          if (shared.ltvTarget === null || typeof shared.ltvTarget === "number")
+            setLtvTarget(shared.ltvTarget);
+          if (typeof shared.propertyType === "string") setPropertyType(shared.propertyType);
+          if (typeof shared.buyerMode === "string") setBuyerMode(shared.buyerMode);
+          if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
+          if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
+          if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+          clearShareFromUrl();
           if (!cancelled) setHydrated(true);
           return;
         }
@@ -477,6 +545,22 @@ export default function PrivatePropertyAffordabilityCalculator() {
       setTimeout(() => setSaveStatus(null), 2000);
     } catch (err) {
       // ignore
+    }
+  };
+
+  const shareLink = async () => {
+    try {
+      const url = encodeShareUrl({
+        age1, income1, age2, income2,
+        existingDebt, cash, cpf1, cpf2,
+        tenure, propertyOrder, stressRate, marketRate, ltvTarget,
+        propertyType, buyerMode, residency1, residency2, absdRemission,
+      });
+      await navigator.clipboard.writeText(url);
+      setSaveStatus("shared");
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (err) {
+      // Clipboard blocked — silently no-op (matches saveAsDefaults posture).
     }
   };
 
@@ -855,6 +939,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   ? "✓ Saved as your defaults"
                   : saveStatus === "reset"
                   ? "↻ Restored factory values"
+                  : saveStatus === "shared"
+                  ? "✓ Link copied to clipboard"
                   : savedHasDefaults
                   ? "Loaded from your saved defaults"
                   : "Using factory defaults"}
@@ -870,6 +956,17 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   }}
                 >
                   Reset
+                </button>
+                <button
+                  onClick={shareLink}
+                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border hover:bg-[#F4EFE2] transition-colors"
+                  style={{
+                    borderColor: "#D9D2BF",
+                    color: "#6B6357",
+                    fontWeight: 600,
+                  }}
+                >
+                  Share link
                 </button>
                 <button
                   onClick={saveAsDefaults}
