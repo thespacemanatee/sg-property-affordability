@@ -346,7 +346,7 @@ const FACTORY_DEFAULTS = {
   absdRemission: false,
 };
 
-export default function LandedAffordabilityCalculator() {
+export default function PrivatePropertyAffordabilityCalculator() {
   const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
   const [income1, setIncome1] = useState(FACTORY_DEFAULTS.income1);
@@ -805,7 +805,7 @@ export default function LandedAffordabilityCalculator() {
               color: "#1F2421",
             }}
           >
-            Landed Property
+            Private Property
             <span style={{ fontStyle: "italic", fontWeight: 300 }}> Affordability</span>
           </h1>
           <p
