@@ -1037,7 +1037,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
 
   const bottleneckLabel = {
     "income+funds": "Income + cash/CPF",
-    "msr+funds": "Limited by MSR + funds",
+    "msr+funds": "MSR + cash/CPF",
     cash: "Minimum cash downpayment",
     funds: "Total cash + CPF",
   }[c.bottleneck] || "Total cash + CPF";
