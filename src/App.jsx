@@ -335,6 +335,7 @@ const FACTORY_DEFAULTS = {
   cpf2: 140000,
   tenure: 25,
   propertyOrder: "first",
+  propertyType: "condo",
   stressRate: 4.0,
   marketRate: 3.25,
   ltvTarget: null,
@@ -351,6 +352,7 @@ export default function LandedAffordabilityCalculator() {
   const [cpf2, setCpf2] = useState(FACTORY_DEFAULTS.cpf2);
   const [tenure, setTenure] = useState(FACTORY_DEFAULTS.tenure);
   const [propertyOrder, setPropertyOrder] = useState(FACTORY_DEFAULTS.propertyOrder);
+  const [propertyType, setPropertyType] = useState(FACTORY_DEFAULTS.propertyType);
   const [stressRate, setStressRate] = useState(FACTORY_DEFAULTS.stressRate);
   const [marketRate, setMarketRate] = useState(FACTORY_DEFAULTS.marketRate);
   // Target price the user is evaluating. null = follow the computed max.
@@ -381,6 +383,7 @@ export default function LandedAffordabilityCalculator() {
           if (typeof s.cpf2 === "number") setCpf2(s.cpf2);
           if (typeof s.tenure === "number") setTenure(s.tenure);
           if (typeof s.propertyOrder === "string") setPropertyOrder(s.propertyOrder);
+          if (typeof s.propertyType === "string") setPropertyType(s.propertyType);
           if (typeof s.stressRate === "number") setStressRate(s.stressRate);
           if (typeof s.marketRate === "number") setMarketRate(s.marketRate);
           if (s.ltvTarget === null || typeof s.ltvTarget === "number")
@@ -404,7 +407,7 @@ export default function LandedAffordabilityCalculator() {
         JSON.stringify({
           age1, income1, age2, income2,
           existingDebt, cash, cpf1, cpf2,
-          tenure, propertyOrder, stressRate, marketRate, ltvTarget,
+          tenure, propertyOrder, propertyType, stressRate, marketRate, ltvTarget,
         })
       );
       setSavedHasDefaults(true);
@@ -426,6 +429,7 @@ export default function LandedAffordabilityCalculator() {
     setCpf2(FACTORY_DEFAULTS.cpf2);
     setTenure(FACTORY_DEFAULTS.tenure);
     setPropertyOrder(FACTORY_DEFAULTS.propertyOrder);
+    setPropertyType(FACTORY_DEFAULTS.propertyType);
     setStressRate(FACTORY_DEFAULTS.stressRate);
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
@@ -886,6 +890,43 @@ export default function LandedAffordabilityCalculator() {
               >
                 ③ Loan &amp; Property
               </h2>
+
+              <div className="mb-5">
+                <div
+                  className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                  style={{ fontWeight: 500 }}
+                >
+                  Property Type
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { v: "condo", label: "Condo / Apt" },
+                    { v: "landed", label: "Landed" },
+                  ].map((o) => (
+                    <button
+                      key={o.v}
+                      onClick={() => setPropertyType(o.v)}
+                      className="py-2.5 px-2 text-center transition-colors border"
+                      style={{
+                        background: propertyType === o.v ? "#1B4332" : "#FAF7EE",
+                        color: propertyType === o.v ? "#FAF7EE" : "#1F2421",
+                        borderColor: propertyType === o.v ? "#1B4332" : "#D9D2BF",
+                      }}
+                    >
+                      <div className="text-sm font-semibold">{o.label}</div>
+                    </button>
+                  ))}
+                </div>
+                {propertyType === "landed" && (
+                  <p
+                    className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
+                    style={{ fontFamily: '"Fraunces", serif' }}
+                  >
+                    Mainland landed property may only be purchased by Singapore
+                    Citizens; Sentosa Cove permits PRs subject to LDAU approval.
+                  </p>
+                )}
+              </div>
 
               <div className="mb-5">
                 <div className="flex items-baseline justify-between mb-2">
