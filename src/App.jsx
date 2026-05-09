@@ -290,6 +290,37 @@ const ComparisonRow = ({ label, sublabel, required, have, suffix = "" }) => {
   );
 };
 
+// ABSD rates by residency × property order (SG, post-27 Apr 2023).
+// Joint purchases pay at the higher of the two buyers' rates. Mixed-couple
+// remission for first matrimonial home applies the SC rate.
+const ABSD_TABLE = {
+  sc:        { first: 0.00, second: 0.20, third: 0.30 },
+  spr:       { first: 0.05, second: 0.30, third: 0.35 },
+  foreigner: { first: 0.60, second: 0.60, third: 0.60 },
+};
+
+function absdRateFor(residency, propertyOrder) {
+  return ABSD_TABLE[residency][propertyOrder];
+}
+
+function isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) {
+  if (buyerMode !== "joint") return false;
+  if (propertyOrder !== "first") return false;
+  const r1IsSC = residency1 === "sc";
+  const r2IsSC = residency2 === "sc";
+  return (r1IsSC || r2IsSC) && !(r1IsSC && r2IsSC);
+}
+
+function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, remission }) {
+  if (remission && isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder })) {
+    return absdRateFor("sc", propertyOrder);
+  }
+  const r1 = absdRateFor(residency1, propertyOrder);
+  if (buyerMode === "solo") return r1;
+  const r2 = absdRateFor(residency2, propertyOrder);
+  return Math.max(r1, r2);
+}
+
 // ----- Main component -----
 
 const STORAGE_KEY = "landed_affordability_defaults_v1";
@@ -443,10 +474,16 @@ export default function LandedAffordabilityCalculator() {
       minCashPct = 0.25;
     }
 
-    // ABSD (post-27 Apr 2023, both Singapore Citizens)
-    let absdRate = 0;
-    if (propertyOrder === "second") absdRate = 0.2;
-    else if (propertyOrder === "third") absdRate = 0.3;
+    // ABSD: residency × property-order lookup. Defaults below preserve the
+    // pre-generalisation calc (both SC, joint, no remission) until the UI
+    // wiring lands in later tasks.
+    const absdRate = effectiveAbsdRate({
+      buyerMode: "joint",
+      residency1: "sc",
+      residency2: "sc",
+      propertyOrder,
+      remission: false,
+    });
 
     const maxPriceFromLoan = maxLoanTDSR / ltv;
 
