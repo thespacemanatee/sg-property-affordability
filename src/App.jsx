@@ -73,7 +73,7 @@ const formatWithCommas = (val, decimal) => {
   return cleaned === "" ? "" : Number(cleaned).toLocaleString("en-US");
 };
 
-const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = false }) => {
+const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = false, disabled = false }) => {
   // `draft` is the live string while focused. null means not editing — use external `value`.
   const [draft, setDraft] = useState(null);
   const inputRef = useRef(null);
@@ -182,7 +182,7 @@ const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = f
   };
 
   return (
-    <label className="block">
+    <label className={`block ${disabled ? "opacity-50" : ""}`}>
       <div className="flex items-baseline justify-between mb-1.5">
         <span
           className="text-[11px] uppercase tracking-[0.14em] text-stone-600"
@@ -216,7 +216,8 @@ const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = f
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="w-full px-3 py-2.5 bg-transparent outline-none text-stone-900 text-base"
+          disabled={disabled}
+          className={`w-full px-3 py-2.5 bg-transparent outline-none text-stone-900 text-base ${disabled ? "cursor-not-allowed" : ""}`}
           style={{
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             fontVariantNumeric: "tabular-nums",
@@ -290,10 +291,86 @@ const ComparisonRow = ({ label, sublabel, required, have, suffix = "" }) => {
   );
 };
 
+// ABSD rates by residency × property order (SG, post-27 Apr 2023).
+// Joint purchases pay at the higher of the two buyers' rates. Mixed-couple
+// remission for first matrimonial home applies the SC rate.
+const ABSD_TABLE = {
+  sc:        { first: 0.00, second: 0.20, third: 0.30 },
+  spr:       { first: 0.05, second: 0.30, third: 0.35 },
+  foreigner: { first: 0.60, second: 0.60, third: 0.60 },
+};
+
+function absdRateFor(residency, propertyOrder) {
+  return ABSD_TABLE[residency][propertyOrder];
+}
+
+function isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) {
+  if (buyerMode !== "joint") return false;
+  if (propertyOrder !== "first") return false;
+  const r1IsSC = residency1 === "sc";
+  const r2IsSC = residency2 === "sc";
+  return (r1IsSC || r2IsSC) && !(r1IsSC && r2IsSC);
+}
+
+function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, remission }) {
+  if (remission && isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder })) {
+    return absdRateFor("sc", propertyOrder);
+  }
+  const r1 = absdRateFor(residency1, propertyOrder);
+  if (buyerMode === "solo") return r1;
+  const r2 = absdRateFor(residency2, propertyOrder);
+  return Math.max(r1, r2);
+}
+
+// Shareable link: encodes the current settings in a hash fragment so a
+// recipient sees the same scenario. Hash fragments are not sent to
+// origin servers, which matters because the payload includes income / CPF.
+const SHARE_PARAM = "s";
+
+const SHAREABLE_FIELDS = [
+  "age1", "income1", "age2", "income2",
+  "existingDebt", "cash", "cpf1", "cpf2",
+  "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
+  "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+];
+
+function encodeShareUrl(settings) {
+  const subset = {};
+  for (const k of SHAREABLE_FIELDS) {
+    if (settings[k] !== undefined) subset[k] = settings[k];
+  }
+  const blob = btoa(JSON.stringify(subset));
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#${SHARE_PARAM}=${blob}`;
+}
+
+function readShareFromHash() {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash || "";
+  const m = hash.match(new RegExp(`(?:^#|&)${SHARE_PARAM}=([^&]+)`));
+  if (!m) return null;
+  try {
+    const json = atob(decodeURIComponent(m[1]));
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearShareFromUrl() {
+  if (typeof window === "undefined" || !window.history?.replaceState) return;
+  const { pathname, search } = window.location;
+  window.history.replaceState(null, "", `${pathname}${search}`);
+}
+
 // ----- Main component -----
 
-const STORAGE_KEY = "landed_affordability_defaults_v1";
+const STORAGE_KEY = "private_property_affordability_v1";
+const LEGACY_STORAGE_KEY = "landed_affordability_defaults_v1";
 const FACTORY_DEFAULTS = {
+  buyerMode: "joint",
   age1: 35,
   income1: 18000,
   age2: 34,
@@ -304,12 +381,17 @@ const FACTORY_DEFAULTS = {
   cpf2: 140000,
   tenure: 25,
   propertyOrder: "first",
+  propertyType: "condo",
+  residency1: "sc",
+  residency2: "sc",
   stressRate: 4.0,
   marketRate: 3.25,
   ltvTarget: null,
+  absdRemission: false,
 };
 
-export default function LandedAffordabilityCalculator() {
+export default function PrivatePropertyAffordabilityCalculator() {
+  const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
   const [income1, setIncome1] = useState(FACTORY_DEFAULTS.income1);
   const [age2, setAge2] = useState(FACTORY_DEFAULTS.age2);
@@ -320,6 +402,9 @@ export default function LandedAffordabilityCalculator() {
   const [cpf2, setCpf2] = useState(FACTORY_DEFAULTS.cpf2);
   const [tenure, setTenure] = useState(FACTORY_DEFAULTS.tenure);
   const [propertyOrder, setPropertyOrder] = useState(FACTORY_DEFAULTS.propertyOrder);
+  const [propertyType, setPropertyType] = useState(FACTORY_DEFAULTS.propertyType);
+  const [residency1, setResidency1] = useState(FACTORY_DEFAULTS.residency1);
+  const [residency2, setResidency2] = useState(FACTORY_DEFAULTS.residency2);
   const [stressRate, setStressRate] = useState(FACTORY_DEFAULTS.stressRate);
   const [marketRate, setMarketRate] = useState(FACTORY_DEFAULTS.marketRate);
   // Target price the user is evaluating. null = follow the computed max.
@@ -327,6 +412,7 @@ export default function LandedAffordabilityCalculator() {
   // User's chosen loan-to-value cap (0–regulatory max). null = take the
   // regulatory maximum. Lower it to take a smaller loan and deploy more cash.
   const [ltvTarget, setLtvTarget] = useState(FACTORY_DEFAULTS.ltvTarget);
+  const [absdRemission, setAbsdRemission] = useState(FACTORY_DEFAULTS.absdRemission);
 
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
@@ -337,7 +423,49 @@ export default function LandedAffordabilityCalculator() {
     let cancelled = false;
     (async () => {
       try {
-        const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+        if (typeof window === "undefined") {
+          if (!cancelled) setHydrated(true);
+          return;
+        }
+        const shared = readShareFromHash();
+        if (shared) {
+          if (typeof shared.age1 === "number") setAge1(shared.age1);
+          if (typeof shared.income1 === "number") setIncome1(shared.income1);
+          if (typeof shared.age2 === "number") setAge2(shared.age2);
+          if (typeof shared.income2 === "number") setIncome2(shared.income2);
+          if (typeof shared.existingDebt === "number") setExistingDebt(shared.existingDebt);
+          if (typeof shared.cash === "number") setCash(shared.cash);
+          if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
+          if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
+          if (typeof shared.tenure === "number") setTenure(shared.tenure);
+          if (typeof shared.propertyOrder === "string") setPropertyOrder(shared.propertyOrder);
+          if (typeof shared.stressRate === "number") setStressRate(shared.stressRate);
+          if (typeof shared.marketRate === "number") setMarketRate(shared.marketRate);
+          if (shared.ltvTarget === null || typeof shared.ltvTarget === "number")
+            setLtvTarget(shared.ltvTarget);
+          if (typeof shared.propertyType === "string") setPropertyType(shared.propertyType);
+          if (typeof shared.buyerMode === "string") setBuyerMode(shared.buyerMode);
+          if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
+          if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
+          if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+          clearShareFromUrl();
+          if (!cancelled) setHydrated(true);
+          return;
+        }
+        let raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacy) {
+            try {
+              JSON.parse(legacy); // sanity-check before migrating
+              window.localStorage.setItem(STORAGE_KEY, legacy);
+              window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+              raw = legacy;
+            } catch {
+              // Legacy payload corrupted — leave it and fall back to factory.
+            }
+          }
+        }
         if (!cancelled && raw) {
           const s = JSON.parse(raw);
           if (typeof s.age1 === "number") setAge1(s.age1);
@@ -354,6 +482,11 @@ export default function LandedAffordabilityCalculator() {
           if (typeof s.marketRate === "number") setMarketRate(s.marketRate);
           if (s.ltvTarget === null || typeof s.ltvTarget === "number")
             setLtvTarget(s.ltvTarget);
+          if (typeof s.propertyType === "string") setPropertyType(s.propertyType);
+          if (typeof s.buyerMode === "string") setBuyerMode(s.buyerMode);
+          if (typeof s.residency1 === "string") setResidency1(s.residency1);
+          if (typeof s.residency2 === "string") setResidency2(s.residency2);
+          if (typeof s.absdRemission === "boolean") setAbsdRemission(s.absdRemission);
           setSavedHasDefaults(true);
         }
       } catch (err) {
@@ -371,9 +504,10 @@ export default function LandedAffordabilityCalculator() {
       window.localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          buyerMode,
           age1, income1, age2, income2,
           existingDebt, cash, cpf1, cpf2,
-          tenure, propertyOrder, stressRate, marketRate, ltvTarget,
+          tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget, absdRemission,
         })
       );
       setSavedHasDefaults(true);
@@ -385,6 +519,7 @@ export default function LandedAffordabilityCalculator() {
   };
 
   const resetToFactory = async () => {
+    setBuyerMode(FACTORY_DEFAULTS.buyerMode);
     setAge1(FACTORY_DEFAULTS.age1);
     setIncome1(FACTORY_DEFAULTS.income1);
     setAge2(FACTORY_DEFAULTS.age2);
@@ -395,9 +530,13 @@ export default function LandedAffordabilityCalculator() {
     setCpf2(FACTORY_DEFAULTS.cpf2);
     setTenure(FACTORY_DEFAULTS.tenure);
     setPropertyOrder(FACTORY_DEFAULTS.propertyOrder);
+    setPropertyType(FACTORY_DEFAULTS.propertyType);
+    setResidency1(FACTORY_DEFAULTS.residency1);
+    setResidency2(FACTORY_DEFAULTS.residency2);
     setStressRate(FACTORY_DEFAULTS.stressRate);
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
+    setAbsdRemission(FACTORY_DEFAULTS.absdRemission);
     setTargetOverride(null);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -409,10 +548,31 @@ export default function LandedAffordabilityCalculator() {
     }
   };
 
+  const shareLink = async () => {
+    try {
+      const url = encodeShareUrl({
+        age1, income1, age2, income2,
+        existingDebt, cash, cpf1, cpf2,
+        tenure, propertyOrder, stressRate, marketRate, ltvTarget,
+        propertyType, buyerMode, residency1, residency2, absdRemission,
+      });
+      await navigator.clipboard.writeText(url);
+      setSaveStatus("shared");
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (err) {
+      // Clipboard blocked — silently no-op (matches saveAsDefaults posture).
+    }
+  };
+
   const c = useMemo(() => {
-    const totalIncome = income1 + income2;
+    const income2Eff = buyerMode === "solo" ? 0 : income2;
+    const age2Eff = buyerMode === "solo" ? 0 : age2;
+    const cpf2Eff = (buyerMode === "solo" || residency2 === "foreigner") ? 0 : cpf2;
+    const cpf1Eff = residency1 === "foreigner" ? 0 : cpf1;
+
+    const totalIncome = income1 + income2Eff;
     const totalCash = Math.max(0, cash);
-    const totalCPF = Math.max(0, cpf1 + cpf2);
+    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
     const totalFunds = totalCash + totalCPF;
 
     // TDSR
@@ -423,8 +583,8 @@ export default function LandedAffordabilityCalculator() {
     // Income-weighted age (MAS guidance for joint borrowers)
     const weightedAge =
       totalIncome > 0
-        ? (age1 * income1 + age2 * income2) / totalIncome
-        : (age1 + age2) / 2;
+        ? (age1 * income1 + age2Eff * income2Eff) / totalIncome
+        : (age1 + age2Eff) / 2;
 
     const exceedsAge = weightedAge + tenure > 65;
     const exceedsTenure = tenure > 30;
@@ -443,10 +603,14 @@ export default function LandedAffordabilityCalculator() {
       minCashPct = 0.25;
     }
 
-    // ABSD (post-27 Apr 2023, both Singapore Citizens)
-    let absdRate = 0;
-    if (propertyOrder === "second") absdRate = 0.2;
-    else if (propertyOrder === "third") absdRate = 0.3;
+    // ABSD: residency × property-order lookup.
+    const absdRate = effectiveAbsdRate({
+      buyerMode,
+      residency1,
+      residency2,
+      propertyOrder,
+      remission: absdRemission,
+    });
 
     const maxPriceFromLoan = maxLoanTDSR / ltv;
 
@@ -626,8 +790,9 @@ export default function LandedAffordabilityCalculator() {
       canAfford,
     };
   }, [
+    buyerMode, absdRemission,
     age1, age2, income1, income2, existingDebt, cash, cpf1, cpf2,
-    tenure, propertyOrder, stressRate, marketRate, targetOverride, ltvTarget,
+    tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
   ]);
 
   const bottleneckLabel = {
@@ -635,6 +800,24 @@ export default function LandedAffordabilityCalculator() {
     cash: "Minimum cash downpayment",
     funds: "Total cash + CPF",
   }[c.bottleneck] || "Total cash + CPF";
+
+  const renderResidencySelect = (value, onChange) => (
+    <label className="block">
+      <span className="text-[10px] uppercase tracking-[0.14em] text-stone-500">
+        Residency
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full text-sm py-1.5 px-2 border bg-[#FAF7EE]"
+        style={{ borderColor: "#D9D2BF", color: "#1F2421" }}
+      >
+        <option value="sc">SG Citizen</option>
+        <option value="spr">SG PR</option>
+        <option value="foreigner">Foreigner</option>
+      </select>
+    </label>
+  );
 
   return (
     <div
@@ -724,7 +907,7 @@ export default function LandedAffordabilityCalculator() {
               color: "#1F2421",
             }}
           >
-            Landed Property
+            Private Property
             <span style={{ fontStyle: "italic", fontWeight: 300 }}> Affordability</span>
           </h1>
           <p
@@ -756,6 +939,8 @@ export default function LandedAffordabilityCalculator() {
                   ? "✓ Saved as your defaults"
                   : saveStatus === "reset"
                   ? "↻ Restored factory values"
+                  : saveStatus === "shared"
+                  ? "✓ Link copied to clipboard"
                   : savedHasDefaults
                   ? "Loaded from your saved defaults"
                   : "Using factory defaults"}
@@ -773,6 +958,17 @@ export default function LandedAffordabilityCalculator() {
                   Reset
                 </button>
                 <button
+                  onClick={shareLink}
+                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border hover:bg-[#F4EFE2] transition-colors"
+                  style={{
+                    borderColor: "#D9D2BF",
+                    color: "#6B6357",
+                    fontWeight: 600,
+                  }}
+                >
+                  Share link
+                </button>
+                <button
                   onClick={saveAsDefaults}
                   className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border transition-colors"
                   style={{
@@ -787,33 +983,79 @@ export default function LandedAffordabilityCalculator() {
               </div>
             </div>
 
+            <div className="-mt-2">
+              <div
+                className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                style={{ fontWeight: 500 }}
+              >
+                Buyer Mode
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { v: "solo", label: "Solo" },
+                  { v: "joint", label: "Joint" },
+                ].map((o) => (
+                  <button
+                    key={o.v}
+                    onClick={() => setBuyerMode(o.v)}
+                    className="py-2 px-2 text-center transition-colors border"
+                    style={{
+                      background: buyerMode === o.v ? "#1B4332" : "#FAF7EE",
+                      color: buyerMode === o.v ? "#FAF7EE" : "#1F2421",
+                      borderColor: buyerMode === o.v ? "#1B4332" : "#D9D2BF",
+                    }}
+                  >
+                    <div className="text-sm font-semibold">{o.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <div className="flex items-baseline justify-between mb-4">
                 <h2
                   className="text-[11px] uppercase tracking-[0.2em]"
                   style={{ fontWeight: 600, color: "#1B4332" }}
                 >
-                  ① The Couple
+                  {buyerMode === "solo" ? "① The Buyer" : "① The Couple"}
                 </h2>
                 <span className="text-xs text-stone-500">Income-weighted age</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className={buyerMode === "solo" ? "" : "grid grid-cols-2 gap-4"}>
                 <div className="space-y-3">
                   <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
-                    Spouse 1
+                    {buyerMode === "solo" ? "Buyer" : "Spouse 1"}
                   </p>
                   <NumberInput label="Age" value={age1} onChange={setAge1} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income1} onChange={setIncome1} prefix="S$" />
-                  <NumberInput label="CPF OA" value={cpf1} onChange={setCpf1} prefix="S$" />
+                  <NumberInput
+                    label="CPF OA"
+                    value={cpf1}
+                    onChange={setCpf1}
+                    prefix="S$"
+                    disabled={residency1 === "foreigner"}
+                    hint={residency1 === "foreigner" ? "Foreigners cannot use CPF" : undefined}
+                  />
+                  {renderResidencySelect(residency1, setResidency1)}
                 </div>
+                {buyerMode === "joint" && (
                 <div className="space-y-3">
                   <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
                     Spouse 2
                   </p>
                   <NumberInput label="Age" value={age2} onChange={setAge2} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income2} onChange={setIncome2} prefix="S$" />
-                  <NumberInput label="CPF OA" value={cpf2} onChange={setCpf2} prefix="S$" />
+                  <NumberInput
+                    label="CPF OA"
+                    value={cpf2}
+                    onChange={setCpf2}
+                    prefix="S$"
+                    disabled={residency2 === "foreigner"}
+                    hint={residency2 === "foreigner" ? "Foreigners cannot use CPF" : undefined}
+                  />
+                  {renderResidencySelect(residency2, setResidency2)}
                 </div>
+                )}
               </div>
             </div>
 
@@ -849,6 +1091,58 @@ export default function LandedAffordabilityCalculator() {
               >
                 ③ Loan &amp; Property
               </h2>
+
+              <div className="mb-5">
+                <div
+                  className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                  style={{ fontWeight: 500 }}
+                >
+                  Property Type
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {[
+                    { v: "condo", label: "Condo / Apt" },
+                    { v: "landed", label: "Landed" },
+                  ].map((o) => (
+                    <button
+                      key={o.v}
+                      onClick={() => setPropertyType(o.v)}
+                      className="py-2.5 px-2 text-center transition-colors border"
+                      style={{
+                        background: propertyType === o.v ? "#1B4332" : "#FAF7EE",
+                        color: propertyType === o.v ? "#FAF7EE" : "#1F2421",
+                        borderColor: propertyType === o.v ? "#1B4332" : "#D9D2BF",
+                      }}
+                    >
+                      <div className="text-sm font-semibold">{o.label}</div>
+                    </button>
+                  ))}
+                </div>
+                {propertyType === "landed" && (
+                  (residency1 !== "sc" || residency2 !== "sc") ? (
+                    <p
+                      className="text-[11px] mt-2 px-3 py-2 leading-relaxed"
+                      style={{
+                        background: "rgba(160,76,45,0.08)",
+                        color: "#A04C2D",
+                        fontFamily: '"Fraunces", serif',
+                        fontStyle: "italic",
+                      }}
+                    >
+                      ⚠ Mainland landed property requires Singapore Citizenship.
+                      Calculation continues for reference only.
+                    </p>
+                  ) : (
+                    <p
+                      className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
+                      style={{ fontFamily: '"Fraunces", serif' }}
+                    >
+                      Mainland landed property may only be purchased by Singapore
+                      Citizens; Sentosa Cove permits PRs subject to LDAU approval.
+                    </p>
+                  )
+                )}
+              </div>
 
               <div className="mb-5">
                 <div className="flex items-baseline justify-between mb-2">
@@ -999,6 +1293,20 @@ export default function LandedAffordabilityCalculator() {
                     </button>
                   ))}
                 </div>
+                {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
+                  <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={absdRemission}
+                      onChange={(e) => setAbsdRemission(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                      First matrimonial home — apply mixed-couple ABSD remission
+                      (uses the SC rate)
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
           </section>

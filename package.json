@@ -1,6 +1,6 @@
 {
-  "name": "landed-affordability",
-  "description": "Singapore landed property affordability calculator",
+  "name": "sg-property-affordability",
+  "description": "Singapore private property affordability calculator (condo & landed)",
   "private": true,
   "version": "0.1.0",
   "type": "module",
