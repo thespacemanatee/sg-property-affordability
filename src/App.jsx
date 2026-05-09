@@ -464,6 +464,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
   const [flatType, setFlatType] = useState(FACTORY_DEFAULTS.flatType);
   const [proximity, setProximity] = useState(FACTORY_DEFAULTS.proximity);
 
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
   const [savedHasDefaults, setSavedHasDefaults] = useState(false);
@@ -1236,10 +1238,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 >
                   Property Type
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
                   {[
                     { v: "condo", label: "Condo / Apt" },
                     { v: "landed", label: "Landed" },
+                    { v: "hdb_bto", label: "HDB BTO" },
+                    { v: "hdb_resale", label: "HDB Resale" },
                   ].map((o) => (
                     <button
                       key={o.v}
@@ -1280,6 +1284,36 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   )
                 )}
               </div>
+
+              {isHdb && (
+                <div className="mb-5">
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    Loan Type
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { v: "hdb", label: "HDB Concessionary" },
+                      { v: "bank", label: "Bank loan" },
+                    ].map((o) => (
+                      <button
+                        key={o.v}
+                        onClick={() => setLoanType(o.v)}
+                        className="py-2.5 px-2 text-center transition-colors border"
+                        style={{
+                          background: loanType === o.v ? "#1B4332" : "#FAF7EE",
+                          color: loanType === o.v ? "#FAF7EE" : "#1F2421",
+                          borderColor: loanType === o.v ? "#1B4332" : "#D9D2BF",
+                        }}
+                      >
+                        <div className="text-sm font-semibold">{o.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mb-5">
                 <div className="flex items-baseline justify-between mb-2">
