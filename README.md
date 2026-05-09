@@ -1,6 +1,6 @@
-# Private Property Affordability · Singapore
+# Singapore Property Affordability
 
-Affordability calculator for Singapore private property (condo & landed) — models TDSR, LTV tiers, BSD, ABSD, cash vs CPF deployment, with a reverse-calc panel and a save/share defaults feature.
+Affordability calculator for Singapore residential property — covers private (condo & landed) and HDB (BTO & resale). Models TDSR, MSR, LTV tiers, BSD, ABSD, CPF deployment and CPF Housing Grants, with a reverse-calc panel and a save/share defaults feature.
 
 ## Local development
 
@@ -51,6 +51,42 @@ If you renamed the repo, update **two** places to match:
 - The README URLs above
 
 For a user-page site (URL = `https://thespacemanatee.github.io/`), name the repo `thespacemanatee.github.io` and set `base: "/"` in `vite.config.js`.
+
+## HDB-specific support
+
+Selecting HDB BTO or HDB Resale unlocks HDB-specific mechanics:
+
+### Loan options
+
+| Mode                   | LTV | Age/tenure reduction | Min cash | Stress floor | Max tenure |
+|------------------------|-----|----------------------|----------|--------------|------------|
+| Private bank           | 75% | yes                  | 5% / 10% | 4%           | 35 yr      |
+| HDB bank loan          | 75% | yes                  | 5%       | 4%           | 30 yr      |
+| HDB Concessionary loan | 75% | none                 | 0%       | 3%           | 25 yr      |
+
+### MSR
+
+For HDB modes, the Mortgage Servicing Ratio caps the monthly mortgage at 30% of gross household income. This binds before TDSR for typical HDB buyers.
+
+### CPF Housing Grants
+
+The calculator models four grants:
+
+- **Enhanced CPF Housing Grant (EHG)** — BTO + Resale, first-timer; up to $120k for couples, half for singles, scaled by 12-month average gross household income.
+- **Family Grant (Resale only)** — $80k for SC+SC couples, $40k for SC+SPR couples, first-timer.
+- **Proximity Housing Grant (Resale only)** — $30k (with parents/married child) or $20k (within 4km); singles get half.
+- **Singles Grant (Resale only)** — $40k for single SC ≥35, first-timer.
+
+Grants flow into CPF OA at completion and offset CPF requirements (not cash). Authoritative amounts: https://www.hdb.gov.sg/residential/buying-a-flat/understanding-your-eligibility-and-housing-loan-options/cpf-housing-grants — values shown here are as of spec date and may need refreshing.
+
+### Eligibility warnings
+
+Soft warnings (calc continues) fire for:
+
+- Foreigner buyer in HDB mode
+- Non-SC-only household for HDB BTO
+- Single buyer aged <35 for HDB BTO
+- Household income above the BTO ceiling for the chosen flat type
 
 ## ABSD rates
 

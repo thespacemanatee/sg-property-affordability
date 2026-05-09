@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { computeGrants, BTO_INCOME_CEILINGS } from "./grants";
 
 // ----- Calculation helpers -----
 
@@ -328,10 +329,11 @@ function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, r
 const SHARE_PARAM = "s";
 
 const SHAREABLE_FIELDS = [
-  "age1", "income1", "age2", "income2",
+  "buyerMode", "age1", "income1", "age2", "income2",
   "existingDebt1", "existingDebt2", "cash1", "cash2", "cpf1", "cpf2",
   "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
-  "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+  "propertyType", "residency1", "residency2", "absdRemission",
+  "loanType", "firstTimer", "flatType", "proximity",
 ];
 
 function encodeShareUrl(settings) {
@@ -367,8 +369,7 @@ function clearShareFromUrl() {
 
 // ----- Main component -----
 
-const STORAGE_KEY = "private_property_affordability_v1";
-const LEGACY_STORAGE_KEY = "landed_affordability_defaults_v1";
+const STORAGE_KEY = "sg_property_affordability_v2";
 const FACTORY_DEFAULTS = {
   buyerMode: "joint",
   age1: 35,
@@ -390,6 +391,10 @@ const FACTORY_DEFAULTS = {
   marketRate: 3.25,
   ltvTarget: null,
   absdRemission: false,
+  loanType: "hdb",
+  firstTimer: true,
+  flatType: "4room",
+  proximity: "none",
 };
 
 // ----- Icons (Lucide-style, inline to avoid a dependency) -----
@@ -430,6 +435,130 @@ const BookmarkIcon = () => (
   </svg>
 );
 
+// Returns an array of { tone: "warn" | "info", text } notes for the current
+// eligibility state. Empty when nothing applies.
+function eligibilityNotes({
+  propertyType,
+  residency1,
+  residency2,
+  buyerMode,
+  age1,
+  totalIncome,
+  flatType,
+}) {
+  const notes = [];
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+
+  if (propertyType === "landed") {
+    if (residency1 !== "sc" || (buyerMode === "joint" && residency2 !== "sc")) {
+      notes.push({
+        tone: "warn",
+        text: "Mainland landed property requires Singapore Citizenship. Calculation continues for reference only.",
+      });
+    } else {
+      notes.push({
+        tone: "info",
+        text: "Mainland landed property may only be purchased by Singapore Citizens; Sentosa Cove permits PRs subject to LDAU approval.",
+      });
+    }
+  }
+
+  if (isHdb) {
+    const r1Foreigner = residency1 === "foreigner";
+    const r2Foreigner = buyerMode === "joint" && residency2 === "foreigner";
+    if (r1Foreigner || r2Foreigner) {
+      notes.push({
+        tone: "warn",
+        text: "Foreigners cannot buy HDB. Calculation continues for reference only.",
+      });
+    }
+  }
+
+  if (propertyType === "hdb_bto") {
+    const hasSc =
+      residency1 === "sc" || (buyerMode === "joint" && residency2 === "sc");
+    if (!hasSc) {
+      notes.push({
+        tone: "warn",
+        text: "BTO requires at least one Singapore Citizen.",
+      });
+    }
+    if (buyerMode === "solo" && residency1 === "sc" && age1 < 35) {
+      notes.push({
+        tone: "warn",
+        text: "Singles must be ≥35 to apply for BTO.",
+      });
+    }
+    const ceiling = BTO_INCOME_CEILINGS[flatType] ?? 14000;
+    const monthly = (totalIncome || 0);
+    if (monthly > ceiling) {
+      notes.push({
+        tone: "warn",
+        text: `Household income $${monthly.toLocaleString()}/mo exceeds BTO ceiling ($${ceiling.toLocaleString()}) for this flat type.`,
+      });
+    }
+  }
+
+  return notes;
+}
+
+// Derive loan-mode constraints from (propertyType, loanType).
+// Used to gate stress-rate floor, tenure cap, LTV table, LTV reducibility,
+// and minimum cash requirements.
+function loanParams({ propertyType, loanType }) {
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+  if (!isHdb) {
+    // Private bank loan (existing behaviour).
+    return {
+      stressFloor: 4.0,
+      tenureCap: 35,
+      ltvFirst: 0.75,
+      ltvReducedFirst: 0.55,
+      ltvSecond: 0.45,
+      ltvReducedSecond: 0.25,
+      ltvThird: 0.35,
+      ltvReducedThird: 0.15,
+      ltvReducible: true,
+      minCashFirst: 0.05,
+      minCashFirstReduced: 0.10,
+      minCashOther: 0.25,
+    };
+  }
+  if (loanType === "hdb") {
+    // HDB Concessionary Loan: 75% LTV, no age/tenure reduction, 0% min cash,
+    // 25-year max tenure, 3% stress floor.
+    return {
+      stressFloor: 3.0,
+      tenureCap: 25,
+      ltvFirst: 0.75,
+      ltvReducedFirst: 0.75,
+      ltvSecond: 0.75,
+      ltvReducedSecond: 0.75,
+      ltvThird: 0.75,
+      ltvReducedThird: 0.75,
+      ltvReducible: false,
+      minCashFirst: 0.0,
+      minCashFirstReduced: 0.0,
+      minCashOther: 0.0,
+    };
+  }
+  // HDB bank loan: same LTV table as private (reducible), 5% min cash, 30y cap, 4% floor.
+  return {
+    stressFloor: 4.0,
+    tenureCap: 30,
+    ltvFirst: 0.75,
+    ltvReducedFirst: 0.55,
+    ltvSecond: 0.45,
+    ltvReducedSecond: 0.25,
+    ltvThird: 0.35,
+    ltvReducedThird: 0.15,
+    ltvReducible: true,
+    minCashFirst: 0.05,
+    minCashFirstReduced: 0.05,
+    minCashOther: 0.05,
+  };
+}
+
 export default function PrivatePropertyAffordabilityCalculator() {
   const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
@@ -455,6 +584,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
   // regulatory maximum. Lower it to take a smaller loan and deploy more cash.
   const [ltvTarget, setLtvTarget] = useState(FACTORY_DEFAULTS.ltvTarget);
   const [absdRemission, setAbsdRemission] = useState(FACTORY_DEFAULTS.absdRemission);
+  const [loanType, setLoanType] = useState(FACTORY_DEFAULTS.loanType);
+  const [firstTimer, setFirstTimer] = useState(FACTORY_DEFAULTS.firstTimer);
+  const [flatType, setFlatType] = useState(FACTORY_DEFAULTS.flatType);
+  const [proximity, setProximity] = useState(FACTORY_DEFAULTS.proximity);
+
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
 
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
@@ -487,6 +622,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
     if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
     if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+    if (typeof shared.loanType === "string") setLoanType(shared.loanType);
+    if (typeof shared.firstTimer === "boolean") setFirstTimer(shared.firstTimer);
+    if (typeof shared.flatType === "string") setFlatType(shared.flatType);
+    if (typeof shared.proximity === "string") setProximity(shared.proximity);
   };
 
   useEffect(() => {
@@ -504,20 +643,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (!cancelled) setHydrated(true);
           return;
         }
-        let raw = window.localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-          if (legacy) {
-            try {
-              JSON.parse(legacy); // sanity-check before migrating
-              window.localStorage.setItem(STORAGE_KEY, legacy);
-              window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-              raw = legacy;
-            } catch {
-              // Legacy payload corrupted — leave it and fall back to factory.
-            }
-          }
-        }
+        const raw = window.localStorage.getItem(STORAGE_KEY);
         if (!cancelled && raw) {
           const s = JSON.parse(raw);
           if (typeof s.age1 === "number") setAge1(s.age1);
@@ -543,6 +669,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (typeof s.residency1 === "string") setResidency1(s.residency1);
           if (typeof s.residency2 === "string") setResidency2(s.residency2);
           if (typeof s.absdRemission === "boolean") setAbsdRemission(s.absdRemission);
+          if (typeof s.loanType === "string") setLoanType(s.loanType);
+          if (typeof s.firstTimer === "boolean") setFirstTimer(s.firstTimer);
+          if (typeof s.flatType === "string") setFlatType(s.flatType);
+          if (typeof s.proximity === "string") setProximity(s.proximity);
           setSavedHasDefaults(true);
         }
       } catch (err) {
@@ -580,6 +710,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
           age1, income1, age2, income2,
           existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
           tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget, absdRemission,
+          loanType, firstTimer, flatType, proximity,
         })
       );
       setSavedHasDefaults(true);
@@ -617,6 +748,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
     setAbsdRemission(FACTORY_DEFAULTS.absdRemission);
+    setLoanType(FACTORY_DEFAULTS.loanType);
+    setFirstTimer(FACTORY_DEFAULTS.firstTimer);
+    setFlatType(FACTORY_DEFAULTS.flatType);
+    setProximity(FACTORY_DEFAULTS.proximity);
     setTargetOverride(null);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -635,6 +770,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
         existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
         tenure, propertyOrder, stressRate, marketRate, ltvTarget,
         propertyType, buyerMode, residency1, residency2, absdRemission,
+        loanType, firstTimer, flatType, proximity,
       });
       await navigator.clipboard.writeText(url);
       setSaveStatus("shared");
@@ -652,16 +788,36 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const cash2Eff = buyerMode === "solo" ? 0 : cash2;
     const existingDebt2Eff = buyerMode === "solo" ? 0 : existingDebt2;
 
+    const grants = computeGrants({
+      propertyType,
+      buyerMode,
+      residency1,
+      residency2,
+      age1,
+      householdMonthlyIncome: income1 + (buyerMode === "joint" ? income2 : 0),
+      firstTimer,
+      proximity,
+    });
+
     const totalIncome = income1 + income2Eff;
     const totalCash = Math.max(0, cash1 + cash2Eff);
-    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
+    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff + grants.total);
     const totalFunds = totalCash + totalCPF;
     const totalExistingDebt = existingDebt1 + existingDebt2Eff;
 
+    // Loan-mode constraints (private bank | HDB Concessionary | HDB bank).
+    const params = loanParams({ propertyType, loanType });
+    const effectiveStressRate = Math.max(stressRate, params.stressFloor);
+    const effectiveTenure = Math.min(tenure, params.tenureCap);
+
     // TDSR
     const tdsrCap = 0.55 * totalIncome;
-    const availableForMortgage = Math.max(0, tdsrCap - totalExistingDebt);
-    const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, tenure, stressRate / 100);
+    const availableForMortgageTdsr = Math.max(0, tdsrCap - totalExistingDebt);
+    // MSR (HDB only): 30% of gross household income caps the monthly mortgage.
+    const msrCap = isHdb ? 0.30 * totalIncome : Infinity;
+    const availableForMortgage = Math.min(availableForMortgageTdsr, msrCap);
+    const msrBinds = isHdb && msrCap < availableForMortgageTdsr;
+    const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, effectiveTenure, effectiveStressRate / 100);
 
     // Income-weighted age (MAS guidance for joint borrowers)
     const weightedAge =
@@ -669,31 +825,38 @@ export default function PrivatePropertyAffordabilityCalculator() {
         ? (age1 * income1 + age2Eff * income2Eff) / totalIncome
         : (age1 + age2Eff) / 2;
 
-    const exceedsAge = weightedAge + tenure > 65;
-    const exceedsTenure = tenure > 30;
-    const reducedLTV = exceedsAge || exceedsTenure;
+    // LTV-reducibility: HDB Concessionary never reduces; private bank and HDB
+    // bank reduce when age+tenure>65 or tenure>30.
+    const exceedsAge = weightedAge + effectiveTenure > 65;
+    const exceedsTenure = effectiveTenure > 30;
+    const reducedLTV = params.ltvReducible && (exceedsAge || exceedsTenure);
 
-    // LTV table (MAS, residential property loans from FIs)
+    // LTV table from loan params. HDB BTO is always first property (eligibility
+    // prohibits other property), regardless of any stale propertyOrder state.
+    const effectivePropertyOrder = propertyType === "hdb_bto" ? "first" : propertyOrder;
     let ltv, minCashPct;
-    if (propertyOrder === "first") {
-      ltv = reducedLTV ? 0.55 : 0.75;
-      minCashPct = reducedLTV ? 0.1 : 0.05;
-    } else if (propertyOrder === "second") {
-      ltv = reducedLTV ? 0.25 : 0.45;
-      minCashPct = 0.25;
-    } else {
-      ltv = reducedLTV ? 0.15 : 0.35;
-      minCashPct = 0.25;
+    if (effectivePropertyOrder === "first") {
+      ltv = reducedLTV ? params.ltvReducedFirst : params.ltvFirst;
+      minCashPct = reducedLTV ? params.minCashFirstReduced : params.minCashFirst;
+    } else if (effectivePropertyOrder === "second") {
+      ltv = reducedLTV ? params.ltvReducedSecond : params.ltvSecond;
+      minCashPct = params.minCashOther;
+    } else { /* third+ */
+      ltv = reducedLTV ? params.ltvReducedThird : params.ltvThird;
+      minCashPct = params.minCashOther;
     }
 
-    // ABSD: residency × property-order lookup.
-    const absdRate = effectiveAbsdRate({
-      buyerMode,
-      residency1,
-      residency2,
-      propertyOrder,
-      remission: absdRemission,
-    });
+    // ABSD: HDB BTO eligibility prohibits other property → ABSD = 0 always.
+    // All other modes use the residency × property-order lookup.
+    const absdRate = propertyType === "hdb_bto"
+      ? 0
+      : effectiveAbsdRate({
+          buyerMode,
+          residency1,
+          residency2,
+          propertyOrder,
+          remission: absdRemission,
+        });
 
     const maxPriceFromLoan = maxLoanTDSR / ltv;
 
@@ -746,7 +909,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
 
     let bottleneck;
     if (cashFloorBinds) bottleneck = "cash";
-    else if (fundsBinds && incomeAtCapAtMax) bottleneck = "income+funds";
+    else if (fundsBinds && incomeAtCapAtMax) bottleneck = msrBinds ? "msr+funds" : "income+funds";
     else if (fundsBinds) bottleneck = "funds";
     else bottleneck = "funds";
 
@@ -777,8 +940,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const cashDp = minCashPct * p;
     const cpfDp = Math.max(0, downpayment - cashDp);
     const mortStamp = Math.min(500, loan * 0.004);
-    const monthlyAtStress = monthlyPayment(loan, tenure, stressRate / 100);
-    const monthlyAtMarket = monthlyPayment(loan, tenure, marketRate / 100);
+    const monthlyAtStress = monthlyPayment(loan, effectiveTenure, effectiveStressRate / 100);
+    const monthlyAtMarket = monthlyPayment(loan, effectiveTenure, marketRate / 100);
 
     // Effective LTV at the target (loan / price). May be lower than the user's
     // chosen LTV cap when income (TDSR) limits the loan further.
@@ -809,7 +972,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const reverseLoan = isFeasible ? loan : effectiveLTV * p;
     const reverseDp = p - reverseLoan;
     const reverseMortStamp = Math.min(500, reverseLoan * 0.004);
-    const reverseMonthly = monthlyPayment(reverseLoan, tenure, stressRate / 100);
+    const reverseMonthly = monthlyPayment(reverseLoan, effectiveTenure, effectiveStressRate / 100);
     const reverseLTV = p > 0 ? reverseLoan / p : 0;
 
     const reqIncome = (reverseMonthly + totalExistingDebt) / 0.55;
@@ -828,6 +991,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
       tdsrCap,
       availableForMortgage,
       maxLoanTDSR,
+      effectiveTenure,
+      effectiveStressRate,
+      tenureClamped: tenure > params.tenureCap,
+      stressRateClamped: stressRate < params.stressFloor,
+      tenureCap: params.tenureCap,
+      stressFloor: params.stressFloor,
       weightedAge,
       reducedLTV,
       exceedsAge,
@@ -872,15 +1041,21 @@ export default function PrivatePropertyAffordabilityCalculator() {
       cashGap,
       fundsGap,
       canAfford,
+      msrBinds,
+      msrCap,
+      grants,
     };
   }, [
-    buyerMode, absdRemission,
-    age1, age2, income1, income2, existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
+    age1, age2, income1, income2, existingDebt1, existingDebt2,
+    cash1, cash2, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
+    buyerMode, absdRemission, propertyType, loanType,
+    firstTimer, flatType, proximity,
   ]);
 
   const bottleneckLabel = {
     "income+funds": "Income + cash/CPF",
+    "msr+funds": "MSR + cash/CPF",
     cash: "Minimum cash downpayment",
     funds: "Total cash + CPF",
   }[c.bottleneck] || "Total cash + CPF";
@@ -991,16 +1166,16 @@ export default function PrivatePropertyAffordabilityCalculator() {
               color: "#1F2421",
             }}
           >
-            Private Property
+            Singapore Property
             <span style={{ fontStyle: "italic", fontWeight: 300 }}> Affordability</span>
           </h1>
           <p
             className="mt-4 max-w-2xl text-stone-700 text-[15px] leading-relaxed"
             style={{ fontFamily: '"Fraunces", Georgia, serif', fontWeight: 300 }}
           >
-            A complete affordability model accounting for TDSR, LTV tiers, age-weighted
-            tenure rules, BSD &amp; ABSD, plus the cash-versus-CPF split that decides
-            what you can actually buy.
+            Models TDSR, MSR, LTV tiers, BSD &amp; ABSD, CPF Housing Grants, and the
+            cash-versus-CPF split — for private (Condo / Landed) and HDB (BTO / Resale)
+            purchases.
           </p>
         </header>
 
@@ -1227,10 +1402,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 >
                   Property Type
                 </div>
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5">
                   {[
                     { v: "condo", label: "Condo / Apt" },
                     { v: "landed", label: "Landed" },
+                    { v: "hdb_bto", label: "HDB BTO" },
+                    { v: "hdb_resale", label: "HDB Resale" },
                   ].map((o) => (
                     <button
                       key={o.v}
@@ -1246,31 +1423,149 @@ export default function PrivatePropertyAffordabilityCalculator() {
                     </button>
                   ))}
                 </div>
-                {propertyType === "landed" && (
-                  (residency1 !== "sc" || residency2 !== "sc") ? (
+                {(() => {
+                  const notes = eligibilityNotes({
+                    propertyType,
+                    residency1,
+                    residency2,
+                    buyerMode,
+                    age1,
+                    totalIncome: income1 + (buyerMode === "joint" ? income2 : 0),
+                    flatType,
+                  });
+                  return notes.map((n, i) => (
                     <p
+                      key={i}
                       className="text-[11px] mt-2 px-3 py-2 leading-relaxed"
-                      style={{
-                        background: "rgba(160,76,45,0.08)",
-                        color: "#A04C2D",
-                        fontFamily: '"Fraunces", serif',
-                        fontStyle: "italic",
-                      }}
+                      style={
+                        n.tone === "warn"
+                          ? {
+                              background: "rgba(160,76,45,0.08)",
+                              color: "#A04C2D",
+                              fontFamily: '"Fraunces", serif',
+                              fontStyle: "italic",
+                            }
+                          : {
+                              fontFamily: '"Fraunces", serif',
+                              fontStyle: "italic",
+                              color: "#57534E",
+                            }
+                      }
                     >
-                      ⚠ Mainland landed property requires Singapore Citizenship.
-                      Calculation continues for reference only.
+                      {n.tone === "warn" ? "⚠ " : ""}
+                      {n.text}
                     </p>
-                  ) : (
-                    <p
-                      className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
-                      style={{ fontFamily: '"Fraunces", serif' }}
-                    >
-                      Mainland landed property may only be purchased by Singapore
-                      Citizens; Sentosa Cove permits PRs subject to LDAU approval.
-                    </p>
-                  )
-                )}
+                  ));
+                })()}
               </div>
+
+              {isHdb && (
+                <div className="mb-5">
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    Loan Type
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { v: "hdb", label: "HDB Concessionary" },
+                      { v: "bank", label: "Bank loan" },
+                    ].map((o) => (
+                      <button
+                        key={o.v}
+                        onClick={() => setLoanType(o.v)}
+                        className="py-2.5 px-2 text-center transition-colors border"
+                        style={{
+                          background: loanType === o.v ? "#1B4332" : "#FAF7EE",
+                          color: loanType === o.v ? "#FAF7EE" : "#1F2421",
+                          borderColor: loanType === o.v ? "#1B4332" : "#D9D2BF",
+                        }}
+                      >
+                        <div className="text-sm font-semibold">{o.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isHdb && (
+                <div className="mb-5 space-y-4">
+                  <label className="flex items-start gap-2 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={firstTimer}
+                      onChange={(e) => setFirstTimer(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                      First-timer household (no prior CPF housing grant or HDB purchase)
+                    </span>
+                  </label>
+
+                  <div>
+                    <div
+                      className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                      style={{ fontWeight: 500 }}
+                    >
+                      Flat Type
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        { v: "2room", label: "2-rm" },
+                        { v: "3room", label: "3-rm" },
+                        { v: "4room", label: "4-rm" },
+                        { v: "5room", label: "5-rm" },
+                        { v: "executive", label: "Exec" },
+                      ].map((o) => (
+                        <button
+                          key={o.v}
+                          onClick={() => setFlatType(o.v)}
+                          className="py-2 px-1.5 text-center transition-colors border"
+                          style={{
+                            background: flatType === o.v ? "#1B4332" : "#FAF7EE",
+                            color: flatType === o.v ? "#FAF7EE" : "#1F2421",
+                            borderColor: flatType === o.v ? "#1B4332" : "#D9D2BF",
+                          }}
+                        >
+                          <div className="text-xs font-semibold">{o.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {propertyType === "hdb_resale" && (
+                    <div>
+                      <div
+                        className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Proximity to Parents / Married Child
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { v: "with", label: "Living with" },
+                          { v: "within4km", label: "Within 4km" },
+                          { v: "none", label: "Neither" },
+                        ].map((o) => (
+                          <button
+                            key={o.v}
+                            onClick={() => setProximity(o.v)}
+                            className="py-2 px-1.5 text-center transition-colors border"
+                            style={{
+                              background: proximity === o.v ? "#1B4332" : "#FAF7EE",
+                              color: proximity === o.v ? "#FAF7EE" : "#1F2421",
+                              borderColor: proximity === o.v ? "#1B4332" : "#D9D2BF",
+                            }}
+                          >
+                            <div className="text-xs font-semibold">{o.label}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mb-5">
                 <div className="flex items-baseline justify-between mb-2">
@@ -1306,6 +1601,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   <span>30 (max for top LTV)</span>
                   <span>35</span>
                 </div>
+                {c.tenureClamped && (
+                  <p
+                    className="text-[10px] italic text-[#A04C2D] mt-1"
+                    style={{ fontFamily: '"Fraunces", serif' }}
+                  >
+                    Capped at {c.tenureCap}y for this loan type.
+                  </p>
+                )}
               </div>
 
               <div className="mb-5">
@@ -1388,54 +1691,56 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 />
               </div>
 
-              <div>
-                <div
-                  className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
-                  style={{ fontWeight: 500 }}
-                >
-                  Property Order (for ABSD &amp; LTV)
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: "first", label: "1st", absd: "0%" },
-                    { v: "second", label: "2nd", absd: "20%" },
-                    { v: "third", label: "3rd+", absd: "30%" },
-                  ].map((o) => (
-                    <button
-                      key={o.v}
-                      onClick={() => setPropertyOrder(o.v)}
-                      className="py-2.5 px-2 text-center transition-colors border"
-                      style={{
-                        background: propertyOrder === o.v ? "#1B4332" : "#FAF7EE",
-                        color: propertyOrder === o.v ? "#FAF7EE" : "#1F2421",
-                        borderColor: propertyOrder === o.v ? "#1B4332" : "#D9D2BF",
-                      }}
-                    >
-                      <div className="text-sm font-semibold">{o.label}</div>
-                      <div
-                        className="text-[10px] opacity-80 mt-0.5"
-                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+              {propertyType !== "hdb_bto" && (
+                <div>
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    Property Order (for ABSD &amp; LTV)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { v: "first", label: "1st", absd: "0%" },
+                      { v: "second", label: "2nd", absd: "20%" },
+                      { v: "third", label: "3rd+", absd: "30%" },
+                    ].map((o) => (
+                      <button
+                        key={o.v}
+                        onClick={() => setPropertyOrder(o.v)}
+                        className="py-2.5 px-2 text-center transition-colors border"
+                        style={{
+                          background: propertyOrder === o.v ? "#1B4332" : "#FAF7EE",
+                          color: propertyOrder === o.v ? "#FAF7EE" : "#1F2421",
+                          borderColor: propertyOrder === o.v ? "#1B4332" : "#D9D2BF",
+                        }}
                       >
-                        ABSD {o.absd}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="text-sm font-semibold">{o.label}</div>
+                        <div
+                          className="text-[10px] opacity-80 mt-0.5"
+                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                        >
+                          ABSD {o.absd}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
+                    <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={absdRemission}
+                        onChange={(e) => setAbsdRemission(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                        First matrimonial home — apply mixed-couple ABSD remission
+                        (uses the SC rate)
+                      </span>
+                    </label>
+                  )}
                 </div>
-                {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
-                  <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={absdRemission}
-                      onChange={(e) => setAbsdRemission(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
-                      First matrimonial home — apply mixed-couple ABSD remission
-                      (uses the SC rate)
-                    </span>
-                  </label>
-                )}
-              </div>
+              )}
             </div>
           </section>
 
@@ -1856,6 +2161,54 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   </div>
                 </div>
               </div>
+              {c.grants.total > 0 && (
+                <div className="mt-4 pt-4 border-t" style={{ borderColor: "#D9D2BF" }}>
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    CPF Housing Grants
+                  </div>
+                  <div className="space-y-1 text-[13px]">
+                    {[
+                      ["EHG (Enhanced CPF Housing Grant)", c.grants.ehg],
+                      ["Family Grant", c.grants.familyGrant],
+                      ["Proximity Housing Grant", c.grants.phg],
+                      ["Singles Grant", c.grants.singlesGrant],
+                    ].filter(([, v]) => v > 0).map(([label, v]) => (
+                      <div key={label} className="flex justify-between">
+                        <span className="text-stone-700">{label}</span>
+                        <span
+                          style={{
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontVariantNumeric: "tabular-nums",
+                            color: "#1B4332",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {fmt(v)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-1 mt-1 border-t" style={{ borderColor: "#D9D2BF" }}>
+                      <span className="text-stone-700 font-semibold">Total grants</span>
+                      <span
+                        style={{
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontVariantNumeric: "tabular-nums",
+                          color: "#1B4332",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {fmt(c.grants.total)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] italic text-stone-500 mt-1" style={{ fontFamily: '"Fraunces", serif' }}>
+                      Grants are paid into CPF OA at completion and offset CPF requirements (not cash).
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Monthly */}
