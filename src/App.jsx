@@ -336,6 +336,8 @@ const FACTORY_DEFAULTS = {
   tenure: 25,
   propertyOrder: "first",
   propertyType: "condo",
+  residency1: "sc",
+  residency2: "sc",
   stressRate: 4.0,
   marketRate: 3.25,
   ltvTarget: null,
@@ -353,6 +355,8 @@ export default function LandedAffordabilityCalculator() {
   const [tenure, setTenure] = useState(FACTORY_DEFAULTS.tenure);
   const [propertyOrder, setPropertyOrder] = useState(FACTORY_DEFAULTS.propertyOrder);
   const [propertyType, setPropertyType] = useState(FACTORY_DEFAULTS.propertyType);
+  const [residency1, setResidency1] = useState(FACTORY_DEFAULTS.residency1);
+  const [residency2, setResidency2] = useState(FACTORY_DEFAULTS.residency2);
   const [stressRate, setStressRate] = useState(FACTORY_DEFAULTS.stressRate);
   const [marketRate, setMarketRate] = useState(FACTORY_DEFAULTS.marketRate);
   // Target price the user is evaluating. null = follow the computed max.
@@ -384,6 +388,8 @@ export default function LandedAffordabilityCalculator() {
           if (typeof s.tenure === "number") setTenure(s.tenure);
           if (typeof s.propertyOrder === "string") setPropertyOrder(s.propertyOrder);
           if (typeof s.propertyType === "string") setPropertyType(s.propertyType);
+          if (typeof s.residency1 === "string") setResidency1(s.residency1);
+          if (typeof s.residency2 === "string") setResidency2(s.residency2);
           if (typeof s.stressRate === "number") setStressRate(s.stressRate);
           if (typeof s.marketRate === "number") setMarketRate(s.marketRate);
           if (s.ltvTarget === null || typeof s.ltvTarget === "number")
@@ -407,7 +413,7 @@ export default function LandedAffordabilityCalculator() {
         JSON.stringify({
           age1, income1, age2, income2,
           existingDebt, cash, cpf1, cpf2,
-          tenure, propertyOrder, propertyType, stressRate, marketRate, ltvTarget,
+          tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget,
         })
       );
       setSavedHasDefaults(true);
@@ -430,6 +436,8 @@ export default function LandedAffordabilityCalculator() {
     setTenure(FACTORY_DEFAULTS.tenure);
     setPropertyOrder(FACTORY_DEFAULTS.propertyOrder);
     setPropertyType(FACTORY_DEFAULTS.propertyType);
+    setResidency1(FACTORY_DEFAULTS.residency1);
+    setResidency2(FACTORY_DEFAULTS.residency2);
     setStressRate(FACTORY_DEFAULTS.stressRate);
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
@@ -478,13 +486,11 @@ export default function LandedAffordabilityCalculator() {
       minCashPct = 0.25;
     }
 
-    // ABSD: residency × property-order lookup. Defaults below preserve the
-    // pre-generalisation calc (both SC, joint, no remission) until the UI
-    // wiring lands in later tasks.
+    // ABSD: residency × property-order lookup.
     const absdRate = effectiveAbsdRate({
       buyerMode: "joint",
-      residency1: "sc",
-      residency2: "sc",
+      residency1,
+      residency2,
       propertyOrder,
       remission: false,
     });
@@ -668,7 +674,7 @@ export default function LandedAffordabilityCalculator() {
     };
   }, [
     age1, age2, income1, income2, existingDebt, cash, cpf1, cpf2,
-    tenure, propertyOrder, stressRate, marketRate, targetOverride, ltvTarget,
+    tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
   ]);
 
   const bottleneckLabel = {
@@ -676,6 +682,24 @@ export default function LandedAffordabilityCalculator() {
     cash: "Minimum cash downpayment",
     funds: "Total cash + CPF",
   }[c.bottleneck] || "Total cash + CPF";
+
+  const renderResidencySelect = (value, onChange) => (
+    <label className="block">
+      <span className="text-[10px] uppercase tracking-[0.14em] text-stone-500">
+        Residency
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1 w-full text-sm py-1.5 px-2 border bg-[#FAF7EE]"
+        style={{ borderColor: "#D9D2BF", color: "#1F2421" }}
+      >
+        <option value="sc">SG Citizen</option>
+        <option value="spr">SG PR</option>
+        <option value="foreigner">Foreigner</option>
+      </select>
+    </label>
+  );
 
   return (
     <div
@@ -846,6 +870,7 @@ export default function LandedAffordabilityCalculator() {
                   <NumberInput label="Age" value={age1} onChange={setAge1} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income1} onChange={setIncome1} prefix="S$" />
                   <NumberInput label="CPF OA" value={cpf1} onChange={setCpf1} prefix="S$" />
+                  {renderResidencySelect(residency1, setResidency1)}
                 </div>
                 <div className="space-y-3">
                   <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
@@ -854,6 +879,7 @@ export default function LandedAffordabilityCalculator() {
                   <NumberInput label="Age" value={age2} onChange={setAge2} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income2} onChange={setIncome2} prefix="S$" />
                   <NumberInput label="CPF OA" value={cpf2} onChange={setCpf2} prefix="S$" />
+                  {renderResidencySelect(residency2, setResidency2)}
                 </div>
               </div>
             </div>
@@ -918,13 +944,28 @@ export default function LandedAffordabilityCalculator() {
                   ))}
                 </div>
                 {propertyType === "landed" && (
-                  <p
-                    className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
-                    style={{ fontFamily: '"Fraunces", serif' }}
-                  >
-                    Mainland landed property may only be purchased by Singapore
-                    Citizens; Sentosa Cove permits PRs subject to LDAU approval.
-                  </p>
+                  (residency1 !== "sc" || residency2 !== "sc") ? (
+                    <p
+                      className="text-[11px] mt-2 px-3 py-2 leading-relaxed"
+                      style={{
+                        background: "rgba(160,76,45,0.08)",
+                        color: "#A04C2D",
+                        fontFamily: '"Fraunces", serif',
+                        fontStyle: "italic",
+                      }}
+                    >
+                      ⚠ Mainland landed property requires Singapore Citizenship.
+                      Calculation continues for reference only.
+                    </p>
+                  ) : (
+                    <p
+                      className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
+                      style={{ fontFamily: '"Fraunces", serif' }}
+                    >
+                      Mainland landed property may only be purchased by Singapore
+                      Citizens; Sentosa Cove permits PRs subject to LDAU approval.
+                    </p>
+                  )
                 )}
               </div>
 
