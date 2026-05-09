@@ -833,14 +833,17 @@ export default function PrivatePropertyAffordabilityCalculator() {
       minCashPct = params.minCashOther;
     }
 
-    // ABSD: residency × property-order lookup.
-    const absdRate = effectiveAbsdRate({
-      buyerMode,
-      residency1,
-      residency2,
-      propertyOrder,
-      remission: absdRemission,
-    });
+    // ABSD: HDB BTO eligibility prohibits other property → ABSD = 0 always.
+    // All other modes use the residency × property-order lookup.
+    const absdRate = propertyType === "hdb_bto"
+      ? 0
+      : effectiveAbsdRate({
+          buyerMode,
+          residency1,
+          residency2,
+          propertyOrder,
+          remission: absdRemission,
+        });
 
     const maxPriceFromLoan = maxLoanTDSR / ltv;
 
@@ -1673,54 +1676,56 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 />
               </div>
 
-              <div>
-                <div
-                  className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
-                  style={{ fontWeight: 500 }}
-                >
-                  Property Order (for ABSD &amp; LTV)
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[
-                    { v: "first", label: "1st", absd: "0%" },
-                    { v: "second", label: "2nd", absd: "20%" },
-                    { v: "third", label: "3rd+", absd: "30%" },
-                  ].map((o) => (
-                    <button
-                      key={o.v}
-                      onClick={() => setPropertyOrder(o.v)}
-                      className="py-2.5 px-2 text-center transition-colors border"
-                      style={{
-                        background: propertyOrder === o.v ? "#1B4332" : "#FAF7EE",
-                        color: propertyOrder === o.v ? "#FAF7EE" : "#1F2421",
-                        borderColor: propertyOrder === o.v ? "#1B4332" : "#D9D2BF",
-                      }}
-                    >
-                      <div className="text-sm font-semibold">{o.label}</div>
-                      <div
-                        className="text-[10px] opacity-80 mt-0.5"
-                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+              {propertyType !== "hdb_bto" && (
+                <div>
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    Property Order (for ABSD &amp; LTV)
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { v: "first", label: "1st", absd: "0%" },
+                      { v: "second", label: "2nd", absd: "20%" },
+                      { v: "third", label: "3rd+", absd: "30%" },
+                    ].map((o) => (
+                      <button
+                        key={o.v}
+                        onClick={() => setPropertyOrder(o.v)}
+                        className="py-2.5 px-2 text-center transition-colors border"
+                        style={{
+                          background: propertyOrder === o.v ? "#1B4332" : "#FAF7EE",
+                          color: propertyOrder === o.v ? "#FAF7EE" : "#1F2421",
+                          borderColor: propertyOrder === o.v ? "#1B4332" : "#D9D2BF",
+                        }}
                       >
-                        ABSD {o.absd}
-                      </div>
-                    </button>
-                  ))}
+                        <div className="text-sm font-semibold">{o.label}</div>
+                        <div
+                          className="text-[10px] opacity-80 mt-0.5"
+                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                        >
+                          ABSD {o.absd}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
+                    <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={absdRemission}
+                        onChange={(e) => setAbsdRemission(e.target.checked)}
+                        className="mt-0.5"
+                      />
+                      <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                        First matrimonial home — apply mixed-couple ABSD remission
+                        (uses the SC rate)
+                      </span>
+                    </label>
+                  )}
                 </div>
-                {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
-                  <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={absdRemission}
-                      onChange={(e) => setAbsdRemission(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
-                      First matrimonial home — apply mixed-couple ABSD remission
-                      (uses the SC rate)
-                    </span>
-                  </label>
-                )}
-              </div>
+              )}
             </div>
           </section>
 
