@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { computeGrants } from "./grants";
+import { computeGrants, BTO_INCOME_CEILINGS } from "./grants";
 
 // ----- Calculation helpers -----
 
@@ -489,8 +489,7 @@ function eligibilityNotes({
         text: "Singles must be ≥35 to apply for BTO.",
       });
     }
-    const ceiling =
-      flatType === "2room" ? 7000 : 14000; // matches BTO_INCOME_CEILINGS in grants.js
+    const ceiling = BTO_INCOME_CEILINGS[flatType] ?? 14000;
     const monthly = (totalIncome || 0);
     if (monthly > ceiling) {
       notes.push({
@@ -832,15 +831,17 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const exceedsTenure = effectiveTenure > 30;
     const reducedLTV = params.ltvReducible && (exceedsAge || exceedsTenure);
 
-    // LTV table from loan params.
+    // LTV table from loan params. HDB BTO is always first property (eligibility
+    // prohibits other property), regardless of any stale propertyOrder state.
+    const effectivePropertyOrder = propertyType === "hdb_bto" ? "first" : propertyOrder;
     let ltv, minCashPct;
-    if (propertyOrder === "first") {
+    if (effectivePropertyOrder === "first") {
       ltv = reducedLTV ? params.ltvReducedFirst : params.ltvFirst;
       minCashPct = reducedLTV ? params.minCashFirstReduced : params.minCashFirst;
-    } else if (propertyOrder === "second") {
+    } else if (effectivePropertyOrder === "second") {
       ltv = reducedLTV ? params.ltvReducedSecond : params.ltvSecond;
       minCashPct = params.minCashOther;
-    } else {
+    } else { /* third+ */
       ltv = reducedLTV ? params.ltvReducedThird : params.ltvThird;
       minCashPct = params.minCashOther;
     }
