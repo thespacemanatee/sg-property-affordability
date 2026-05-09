@@ -328,10 +328,11 @@ function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, r
 const SHARE_PARAM = "s";
 
 const SHAREABLE_FIELDS = [
-  "age1", "income1", "age2", "income2",
+  "buyerMode", "age1", "income1", "age2", "income2",
   "existingDebt1", "existingDebt2", "cash1", "cash2", "cpf1", "cpf2",
   "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
   "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+  "loanType", "firstTimer", "flatType", "proximity",
 ];
 
 function encodeShareUrl(settings) {
@@ -367,8 +368,7 @@ function clearShareFromUrl() {
 
 // ----- Main component -----
 
-const STORAGE_KEY = "private_property_affordability_v1";
-const LEGACY_STORAGE_KEY = "landed_affordability_defaults_v1";
+const STORAGE_KEY = "sg_property_affordability_v2";
 const FACTORY_DEFAULTS = {
   buyerMode: "joint",
   age1: 35,
@@ -390,6 +390,10 @@ const FACTORY_DEFAULTS = {
   marketRate: 3.25,
   ltvTarget: null,
   absdRemission: false,
+  loanType: "hdb",
+  firstTimer: true,
+  flatType: "4room",
+  proximity: "none",
 };
 
 // ----- Icons (Lucide-style, inline to avoid a dependency) -----
@@ -455,6 +459,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
   // regulatory maximum. Lower it to take a smaller loan and deploy more cash.
   const [ltvTarget, setLtvTarget] = useState(FACTORY_DEFAULTS.ltvTarget);
   const [absdRemission, setAbsdRemission] = useState(FACTORY_DEFAULTS.absdRemission);
+  const [loanType, setLoanType] = useState(FACTORY_DEFAULTS.loanType);
+  const [firstTimer, setFirstTimer] = useState(FACTORY_DEFAULTS.firstTimer);
+  const [flatType, setFlatType] = useState(FACTORY_DEFAULTS.flatType);
+  const [proximity, setProximity] = useState(FACTORY_DEFAULTS.proximity);
 
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
@@ -487,6 +495,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
     if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
     if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+    if (typeof shared.loanType === "string") setLoanType(shared.loanType);
+    if (typeof shared.firstTimer === "boolean") setFirstTimer(shared.firstTimer);
+    if (typeof shared.flatType === "string") setFlatType(shared.flatType);
+    if (typeof shared.proximity === "string") setProximity(shared.proximity);
   };
 
   useEffect(() => {
@@ -504,20 +516,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (!cancelled) setHydrated(true);
           return;
         }
-        let raw = window.localStorage.getItem(STORAGE_KEY);
-        if (!raw) {
-          const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
-          if (legacy) {
-            try {
-              JSON.parse(legacy); // sanity-check before migrating
-              window.localStorage.setItem(STORAGE_KEY, legacy);
-              window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-              raw = legacy;
-            } catch {
-              // Legacy payload corrupted — leave it and fall back to factory.
-            }
-          }
-        }
+        const raw = window.localStorage.getItem(STORAGE_KEY);
         if (!cancelled && raw) {
           const s = JSON.parse(raw);
           if (typeof s.age1 === "number") setAge1(s.age1);
@@ -543,6 +542,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (typeof s.residency1 === "string") setResidency1(s.residency1);
           if (typeof s.residency2 === "string") setResidency2(s.residency2);
           if (typeof s.absdRemission === "boolean") setAbsdRemission(s.absdRemission);
+          if (typeof s.loanType === "string") setLoanType(s.loanType);
+          if (typeof s.firstTimer === "boolean") setFirstTimer(s.firstTimer);
+          if (typeof s.flatType === "string") setFlatType(s.flatType);
+          if (typeof s.proximity === "string") setProximity(s.proximity);
           setSavedHasDefaults(true);
         }
       } catch (err) {
@@ -580,6 +583,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
           age1, income1, age2, income2,
           existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
           tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget, absdRemission,
+          loanType, firstTimer, flatType, proximity,
         })
       );
       setSavedHasDefaults(true);
@@ -617,6 +621,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
     setAbsdRemission(FACTORY_DEFAULTS.absdRemission);
+    setLoanType(FACTORY_DEFAULTS.loanType);
+    setFirstTimer(FACTORY_DEFAULTS.firstTimer);
+    setFlatType(FACTORY_DEFAULTS.flatType);
+    setProximity(FACTORY_DEFAULTS.proximity);
     setTargetOverride(null);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -635,6 +643,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
         existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
         tenure, propertyOrder, stressRate, marketRate, ltvTarget,
         propertyType, buyerMode, residency1, residency2, absdRemission,
+        loanType, firstTimer, flatType, proximity,
       });
       await navigator.clipboard.writeText(url);
       setSaveStatus("shared");
