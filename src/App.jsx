@@ -324,7 +324,8 @@ function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, r
 
 // ----- Main component -----
 
-const STORAGE_KEY = "landed_affordability_defaults_v1";
+const STORAGE_KEY = "private_property_affordability_v1";
+const LEGACY_STORAGE_KEY = "landed_affordability_defaults_v1";
 const FACTORY_DEFAULTS = {
   buyerMode: "joint",
   age1: 35,
@@ -379,10 +380,26 @@ export default function PrivatePropertyAffordabilityCalculator() {
     let cancelled = false;
     (async () => {
       try {
-        const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+        if (typeof window === "undefined") {
+          if (!cancelled) setHydrated(true);
+          return;
+        }
+        let raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          const legacy = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacy) {
+            try {
+              JSON.parse(legacy); // sanity-check before migrating
+              window.localStorage.setItem(STORAGE_KEY, legacy);
+              window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+              raw = legacy;
+            } catch {
+              // Legacy payload corrupted — leave it and fall back to factory.
+            }
+          }
+        }
         if (!cancelled && raw) {
           const s = JSON.parse(raw);
-          if (typeof s.buyerMode === "string") setBuyerMode(s.buyerMode);
           if (typeof s.age1 === "number") setAge1(s.age1);
           if (typeof s.income1 === "number") setIncome1(s.income1);
           if (typeof s.age2 === "number") setAge2(s.age2);
@@ -393,13 +410,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (typeof s.cpf2 === "number") setCpf2(s.cpf2);
           if (typeof s.tenure === "number") setTenure(s.tenure);
           if (typeof s.propertyOrder === "string") setPropertyOrder(s.propertyOrder);
-          if (typeof s.propertyType === "string") setPropertyType(s.propertyType);
-          if (typeof s.residency1 === "string") setResidency1(s.residency1);
-          if (typeof s.residency2 === "string") setResidency2(s.residency2);
           if (typeof s.stressRate === "number") setStressRate(s.stressRate);
           if (typeof s.marketRate === "number") setMarketRate(s.marketRate);
           if (s.ltvTarget === null || typeof s.ltvTarget === "number")
             setLtvTarget(s.ltvTarget);
+          if (typeof s.propertyType === "string") setPropertyType(s.propertyType);
+          if (typeof s.buyerMode === "string") setBuyerMode(s.buyerMode);
+          if (typeof s.residency1 === "string") setResidency1(s.residency1);
+          if (typeof s.residency2 === "string") setResidency2(s.residency2);
           if (typeof s.absdRemission === "boolean") setAbsdRemission(s.absdRemission);
           setSavedHasDefaults(true);
         }
