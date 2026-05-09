@@ -1113,7 +1113,7 @@ export default function LandedAffordabilityCalculator() {
                     }}
                   >
                     {c.canAfford
-                      ? targetOverride === null || c.target >= c.maxPrice - 1
+                      ? targetOverride !== null && c.target >= c.maxPrice - 1
                         ? `Limited by ${bottleneckLabel.toLowerCase()}`
                         : "Within reach"
                       : "Requires upgrades"}
