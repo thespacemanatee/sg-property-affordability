@@ -7,5 +7,5 @@ import react from "@vitejs/plugin-react";
 // Final URL will be:  https://<user>.github.io/<repo>/
 export default defineConfig({
   plugins: [react()],
-  base: "/sg-landed-affordability/",
+  base: "/sg-property-affordability/",
 });
