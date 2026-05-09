@@ -1315,6 +1315,84 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 </div>
               )}
 
+              {isHdb && (
+                <div className="mb-5 space-y-4">
+                  <label className="flex items-start gap-2 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={firstTimer}
+                      onChange={(e) => setFirstTimer(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                      First-timer household (no prior CPF housing grant or HDB purchase)
+                    </span>
+                  </label>
+
+                  <div>
+                    <div
+                      className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                      style={{ fontWeight: 500 }}
+                    >
+                      Flat Type
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[
+                        { v: "2room", label: "2-rm" },
+                        { v: "3room", label: "3-rm" },
+                        { v: "4room", label: "4-rm" },
+                        { v: "5room", label: "5-rm" },
+                        { v: "executive", label: "Exec" },
+                      ].map((o) => (
+                        <button
+                          key={o.v}
+                          onClick={() => setFlatType(o.v)}
+                          className="py-2 px-1.5 text-center transition-colors border"
+                          style={{
+                            background: flatType === o.v ? "#1B4332" : "#FAF7EE",
+                            color: flatType === o.v ? "#FAF7EE" : "#1F2421",
+                            borderColor: flatType === o.v ? "#1B4332" : "#D9D2BF",
+                          }}
+                        >
+                          <div className="text-xs font-semibold">{o.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {propertyType === "hdb_resale" && (
+                    <div>
+                      <div
+                        className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                        style={{ fontWeight: 500 }}
+                      >
+                        Proximity to Parents / Married Child
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[
+                          { v: "with", label: "Living with" },
+                          { v: "within4km", label: "Within 4km" },
+                          { v: "none", label: "Neither" },
+                        ].map((o) => (
+                          <button
+                            key={o.v}
+                            onClick={() => setProximity(o.v)}
+                            className="py-2 px-1.5 text-center transition-colors border"
+                            style={{
+                              background: proximity === o.v ? "#1B4332" : "#FAF7EE",
+                              color: proximity === o.v ? "#FAF7EE" : "#1F2421",
+                              borderColor: proximity === o.v ? "#1B4332" : "#D9D2BF",
+                            }}
+                          >
+                            <div className="text-xs font-semibold">{o.label}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="mb-5">
                 <div className="flex items-baseline justify-between mb-2">
                   <span
