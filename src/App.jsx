@@ -461,6 +461,34 @@ export default function PrivatePropertyAffordabilityCalculator() {
   const [savedHasDefaults, setSavedHasDefaults] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // null | "saved" | "reset"
 
+  // Apply a parsed shared-settings blob to state. Used both on initial mount
+  // and on hashchange (so pasting a share URL into an already-open tab works).
+  const applyShared = (shared) => {
+    if (typeof shared.age1 === "number") setAge1(shared.age1);
+    if (typeof shared.income1 === "number") setIncome1(shared.income1);
+    if (typeof shared.age2 === "number") setAge2(shared.age2);
+    if (typeof shared.income2 === "number") setIncome2(shared.income2);
+    if (typeof shared.existingDebt1 === "number") setExistingDebt1(shared.existingDebt1);
+    else if (typeof shared.existingDebt === "number") { setExistingDebt1(shared.existingDebt); setExistingDebt2(0); }
+    if (typeof shared.existingDebt2 === "number") setExistingDebt2(shared.existingDebt2);
+    if (typeof shared.cash1 === "number") setCash1(shared.cash1);
+    else if (typeof shared.cash === "number") { setCash1(shared.cash); setCash2(0); }
+    if (typeof shared.cash2 === "number") setCash2(shared.cash2);
+    if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
+    if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
+    if (typeof shared.tenure === "number") setTenure(shared.tenure);
+    if (typeof shared.propertyOrder === "string") setPropertyOrder(shared.propertyOrder);
+    if (typeof shared.stressRate === "number") setStressRate(shared.stressRate);
+    if (typeof shared.marketRate === "number") setMarketRate(shared.marketRate);
+    if (shared.ltvTarget === null || typeof shared.ltvTarget === "number")
+      setLtvTarget(shared.ltvTarget);
+    if (typeof shared.propertyType === "string") setPropertyType(shared.propertyType);
+    if (typeof shared.buyerMode === "string") setBuyerMode(shared.buyerMode);
+    if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
+    if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
+    if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+  };
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -471,29 +499,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
         }
         const shared = readShareFromHash();
         if (shared) {
-          if (typeof shared.age1 === "number") setAge1(shared.age1);
-          if (typeof shared.income1 === "number") setIncome1(shared.income1);
-          if (typeof shared.age2 === "number") setAge2(shared.age2);
-          if (typeof shared.income2 === "number") setIncome2(shared.income2);
-          if (typeof shared.existingDebt1 === "number") setExistingDebt1(shared.existingDebt1);
-          else if (typeof shared.existingDebt === "number") { setExistingDebt1(shared.existingDebt); setExistingDebt2(0); }
-          if (typeof shared.existingDebt2 === "number") setExistingDebt2(shared.existingDebt2);
-          if (typeof shared.cash1 === "number") setCash1(shared.cash1);
-          else if (typeof shared.cash === "number") { setCash1(shared.cash); setCash2(0); }
-          if (typeof shared.cash2 === "number") setCash2(shared.cash2);
-          if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
-          if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
-          if (typeof shared.tenure === "number") setTenure(shared.tenure);
-          if (typeof shared.propertyOrder === "string") setPropertyOrder(shared.propertyOrder);
-          if (typeof shared.stressRate === "number") setStressRate(shared.stressRate);
-          if (typeof shared.marketRate === "number") setMarketRate(shared.marketRate);
-          if (shared.ltvTarget === null || typeof shared.ltvTarget === "number")
-            setLtvTarget(shared.ltvTarget);
-          if (typeof shared.propertyType === "string") setPropertyType(shared.propertyType);
-          if (typeof shared.buyerMode === "string") setBuyerMode(shared.buyerMode);
-          if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
-          if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
-          if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+          applyShared(shared);
           clearShareFromUrl();
           if (!cancelled) setHydrated(true);
           return;
@@ -549,6 +555,22 @@ export default function PrivatePropertyAffordabilityCalculator() {
     };
   }, []);
 
+  // Listen for hashchange so pasting a share URL into an already-open tab
+  // applies the encoded settings (the mount effect alone misses this case).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onHashChange = () => {
+      const shared = readShareFromHash();
+      if (!shared) return;
+      applyShared(shared);
+      clearShareFromUrl();
+      setSaveStatus("shared-loaded");
+      setTimeout(() => setSaveStatus(null), 2000);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   const saveAsDefaults = async () => {
     try {
       window.localStorage.setItem(
@@ -569,6 +591,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
   };
 
   const resetToFactory = async () => {
+    if (typeof window !== "undefined" && typeof window.confirm === "function") {
+      const ok = window.confirm(
+        "Reset all settings to factory defaults? Your saved defaults will be cleared."
+      );
+      if (!ok) return;
+    }
     setBuyerMode(FACTORY_DEFAULTS.buyerMode);
     setAge1(FACTORY_DEFAULTS.age1);
     setIncome1(FACTORY_DEFAULTS.income1);
@@ -999,6 +1027,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   ? "↻ Restored factory values"
                   : saveStatus === "shared"
                   ? "✓ Link copied to clipboard"
+                  : saveStatus === "shared-loaded"
+                  ? "✓ Loaded shared settings"
                   : savedHasDefaults
                   ? "Loaded from your saved defaults"
                   : "Using factory defaults"}
