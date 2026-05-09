@@ -331,7 +331,7 @@ const SHAREABLE_FIELDS = [
   "buyerMode", "age1", "income1", "age2", "income2",
   "existingDebt1", "existingDebt2", "cash1", "cash2", "cpf1", "cpf2",
   "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
-  "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+  "propertyType", "residency1", "residency2", "absdRemission",
   "loanType", "firstTimer", "flatType", "proximity",
 ];
 
