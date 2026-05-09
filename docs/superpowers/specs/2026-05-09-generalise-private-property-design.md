@@ -100,6 +100,32 @@ Storage:
   override: when a buyer is Foreigner, their persisted CPF value is stored
   as zero (consistent with the runtime gate).
 
+## Shareable link
+
+Users can copy a link that encodes their current settings, so a recipient
+opening the link sees the same scenario without having to re-enter inputs.
+
+- Encoding: hash fragment with a single base64-encoded JSON blob —
+  `#s=<base64(JSON.stringify(settings))>`. Hash fragments are never sent to
+  origin servers, which matters because the payload includes income, CPF,
+  and cash figures.
+- Payload: the same field set persisted by Save defaults — every input that
+  affects the calc, including the five new fields from this spec
+  (`propertyType`, `buyerMode`, `residency1`, `residency2`, `absdRemission`).
+  `targetOverride` is excluded (it's exploration state, not configuration).
+- UI: a "Share link" button in the existing persistence toolbar (next to
+  Save / Reset). Click → build URL → write to clipboard via
+  `navigator.clipboard.writeText` → show "✓ Link copied" status alongside
+  the existing Saved / Reset feedback.
+- Load behaviour: on mount, before the localStorage load, check for an `s=`
+  hash param. If present and parseable, apply it to state and rewrite the
+  URL via `history.replaceState` to drop the hash (cleaner UI, prevents
+  accidentally re-sharing the same link with edited values). If absent or
+  corrupt, fall through to the existing localStorage → factory chain.
+- Precedence at mount: shared link > localStorage > factory.
+- Bad payloads (corrupt base64, invalid JSON, missing fields) fail silently
+  to the next layer in the precedence chain — never blocks the app.
+
 ## Branding
 
 - App title: "Landed Property Affordability · Singapore" → "Private Property
@@ -142,6 +168,9 @@ automatic redirect handles existing clones and the previous Pages URL.
 - **Landed + any non-SC buyer**: warning rendered, calc proceeds.
 - **Solo + property order = third**: existing 3rd-property ABSD applies for
   that buyer's residency; remission never applies (solo).
+- **Shared-link load**: corrupt payload → app loads with localStorage or
+  factory values; URL hash is left intact for the user to inspect. Valid
+  payload → state populated, hash cleared.
 
 ## Testing approach
 

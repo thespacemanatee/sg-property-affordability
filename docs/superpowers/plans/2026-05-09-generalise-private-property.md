@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Generalise the calculator from "landed property, both-SC married couple" to all SG private property: any property type (Condo / Landed), any buyer mode (Solo / Joint), per-buyer residency (SC / SPR / Foreigner), with mixed-couple ABSD remission for first matrimonial home.
+**Goal:** Generalise the calculator from "landed property, both-SC married couple" to all SG private property: any property type (Condo / Landed), any buyer mode (Solo / Joint), per-buyer residency (SC / SPR / Foreigner), with mixed-couple ABSD remission for first matrimonial home. Also add a shareable-link feature so users can hand a recipient a URL that loads their exact scenario.
 
-**Architecture:** All work lives in `src/App.jsx` (single-file React component) plus repo metadata files. The current hard-coded ABSD ladder is replaced with a residency × property-order lookup. New state for property type, buyer mode, per-buyer residency, and ABSD remission is added; existing TDSR / LTV / BSD / cash-vs-CPF logic is residency-agnostic and stays untouched. The localStorage key is bumped with a one-shot migration from the old key.
+**Architecture:** All work lives in `src/App.jsx` (single-file React component) plus repo metadata files. The current hard-coded ABSD ladder is replaced with a residency × property-order lookup. New state for property type, buyer mode, per-buyer residency, and ABSD remission is added; existing TDSR / LTV / BSD / cash-vs-CPF logic is residency-agnostic and stays untouched. The localStorage key is bumped with a one-shot migration from the old key. Settings sharing is via a base64-encoded JSON blob in the URL hash fragment (kept off origin servers since the payload contains income / CPF figures).
 
 **Tech Stack:** React 18, Vite 5, Tailwind CSS 3, browser localStorage. No test runner — verification at each task is manual via the Vite dev server (`npm run dev`).
 
@@ -1009,7 +1009,185 @@ git commit -m "Bump storage key + one-shot migration from legacy key"
 
 ---
 
-## Task 10: End-to-end manual verification + open PR
+## Task 10: Shareable link
+
+**Files:**
+- Modify: `src/App.jsx` (helpers near top of file; toolbar button; load effect)
+
+Adds a "Share link" button that copies a URL with the current settings encoded as a base64 JSON blob in the hash fragment. On mount, a shared link is applied first, then the URL hash is cleared. Precedence at mount: shared link > localStorage > factory.
+
+- [ ] **Step 10.1: Add encode/decode helpers**
+
+Above `// ----- Main component -----` in `src/App.jsx` (~line 293), insert:
+
+```js
+// Shareable link: encodes the current settings in a hash fragment so a
+// recipient sees the same scenario. Hash fragments are not sent to
+// origin servers, which matters because the payload includes income / CPF.
+const SHARE_PARAM = "s";
+
+const SHAREABLE_FIELDS = [
+  "age1", "income1", "age2", "income2",
+  "existingDebt", "cash", "cpf1", "cpf2",
+  "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
+  "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
+];
+
+function encodeShareUrl(settings) {
+  const subset = {};
+  for (const k of SHAREABLE_FIELDS) {
+    if (settings[k] !== undefined) subset[k] = settings[k];
+  }
+  const blob = btoa(JSON.stringify(subset));
+  const { origin, pathname } = window.location;
+  return `${origin}${pathname}#${SHARE_PARAM}=${blob}`;
+}
+
+function readShareFromHash() {
+  if (typeof window === "undefined") return null;
+  const hash = window.location.hash || "";
+  const m = hash.match(new RegExp(`(?:^#|&)${SHARE_PARAM}=([^&]+)`));
+  if (!m) return null;
+  try {
+    const json = atob(decodeURIComponent(m[1]));
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearShareFromUrl() {
+  if (typeof window === "undefined" || !window.history?.replaceState) return;
+  const { pathname, search } = window.location;
+  window.history.replaceState(null, "", `${pathname}${search}`);
+}
+```
+
+- [ ] **Step 10.2: Apply shared link before localStorage in the load effect**
+
+In the load effect (rewritten in Task 9.2), insert the share-link branch immediately after the `if (typeof window === "undefined")` early return and before the `let raw = window.localStorage.getItem(...)` line:
+
+```js
+        const shared = readShareFromHash();
+        if (shared) {
+          if (typeof shared.age1 === "number") setAge1(shared.age1);
+          if (typeof shared.income1 === "number") setIncome1(shared.income1);
+          if (typeof shared.age2 === "number") setAge2(shared.age2);
+          if (typeof shared.income2 === "number") setIncome2(shared.income2);
+          if (typeof shared.existingDebt === "number") setExistingDebt(shared.existingDebt);
+          if (typeof shared.cash === "number") setCash(shared.cash);
+          if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
+          if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
+          if (typeof shared.tenure === "number") setTenure(shared.tenure);
+          if (typeof shared.propertyOrder === "string") setPropertyOrder(shared.propertyOrder);
+          if (typeof shared.stressRate === "number") setStressRate(shared.stressRate);
+          if (typeof shared.marketRate === "number") setMarketRate(shared.marketRate);
+          if (shared.ltvTarget === null || typeof shared.ltvTarget === "number")
+            setLtvTarget(shared.ltvTarget);
+          if (typeof shared.propertyType === "string") setPropertyType(shared.propertyType);
+          if (typeof shared.buyerMode === "string") setBuyerMode(shared.buyerMode);
+          if (typeof shared.residency1 === "string") setResidency1(shared.residency1);
+          if (typeof shared.residency2 === "string") setResidency2(shared.residency2);
+          if (typeof shared.absdRemission === "boolean") setAbsdRemission(shared.absdRemission);
+          clearShareFromUrl();
+          if (!cancelled) setHydrated(true);
+          return;
+        }
+```
+
+The early `return` skips the localStorage branch when a shared link was applied — share link wins.
+
+- [ ] **Step 10.3: Add a `shareLink` action**
+
+Inside the component, alongside `saveAsDefaults` and `resetToFactory` (~line 369), add:
+
+```js
+  const shareLink = async () => {
+    try {
+      const url = encodeShareUrl({
+        age1, income1, age2, income2,
+        existingDebt, cash, cpf1, cpf2,
+        tenure, propertyOrder, stressRate, marketRate, ltvTarget,
+        propertyType, buyerMode, residency1, residency2, absdRemission,
+      });
+      await navigator.clipboard.writeText(url);
+      setSaveStatus("shared");
+      setTimeout(() => setSaveStatus(null), 2000);
+    } catch (err) {
+      // Clipboard blocked — silently no-op (matches saveAsDefaults posture).
+    }
+  };
+```
+
+- [ ] **Step 10.4: Extend the status message and add the toolbar button**
+
+In the persistence toolbar (~line 755-762), extend the status text to recognise the new state. Replace the existing status block:
+
+```jsx
+                {saveStatus === "saved"
+                  ? "✓ Saved as your defaults"
+                  : saveStatus === "reset"
+                  ? "↻ Restored factory values"
+                  : savedHasDefaults
+                  ? "Loaded from your saved defaults"
+                  : "Using factory defaults"}
+```
+
+with:
+
+```jsx
+                {saveStatus === "saved"
+                  ? "✓ Saved as your defaults"
+                  : saveStatus === "reset"
+                  ? "↻ Restored factory values"
+                  : saveStatus === "shared"
+                  ? "✓ Link copied to clipboard"
+                  : savedHasDefaults
+                  ? "Loaded from your saved defaults"
+                  : "Using factory defaults"}
+```
+
+In the same toolbar, between the Reset and Save buttons (~line 764-786), add the Share button:
+
+```jsx
+                <button
+                  onClick={shareLink}
+                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border hover:bg-[#F4EFE2] transition-colors"
+                  style={{
+                    borderColor: "#D9D2BF",
+                    color: "#6B6357",
+                    fontWeight: 600,
+                  }}
+                >
+                  Share link
+                </button>
+```
+
+So the toolbar reads (left to right): status text · Reset · Share link · Save as defaults.
+
+- [ ] **Step 10.5: Verify**
+
+```bash
+npm run dev
+```
+
+- Open the app at `http://localhost:5173/sg-property-affordability/`. Tweak several inputs (e.g., income1 = 22000, propertyType = Landed, buyerMode = Solo). Click "Share link". Status should read "✓ Link copied to clipboard".
+- Paste the copied URL into a new browser tab (or incognito window). The app should load with the same tweaked values, and the URL bar should rewrite to drop the `#s=...` portion.
+- Manually open `…/sg-property-affordability/#s=not-base64`. App should load with localStorage / factory values; the corrupt hash stays in the URL untouched (per spec).
+- With saved defaults present in localStorage AND a valid share link in the URL: the share link wins. Confirm by saving one set of defaults, then opening a share URL with different values — UI shows the shared values.
+
+- [ ] **Step 10.6: Commit**
+
+```bash
+git add src/App.jsx
+git commit -m "Shareable link: encode settings in hash fragment + Share link button"
+```
+
+---
+
+## Task 11: End-to-end manual verification + open PR
 
 **Files:** none (verification only)
 
@@ -1034,6 +1212,10 @@ For each row, verify the described outcome:
 | 7 | Save defaults with non-default state, reload | All choices persist |
 | 8 | Reset | All values return to factory defaults |
 | 9 | Snap-to-max status (re-verify the earlier fix) | Default state reads "Within reach" |
+| 10 | Tweak inputs, click Share link | Status reads "✓ Link copied to clipboard"; URL on clipboard contains `#s=` payload |
+| 11 | Open the copied URL in a new tab | App loads with the tweaked values; URL rewrites to drop the hash |
+| 12 | Open `.../#s=not-base64` (corrupt) | Loads with localStorage / factory values; corrupt hash stays in the URL |
+| 13 | Saved defaults + open a different share link | Shared values win on load (precedence: shared link > localStorage) |
 
 If any row fails, fix in place and re-run the failing rows. Don't proceed to the PR until all pass.
 
