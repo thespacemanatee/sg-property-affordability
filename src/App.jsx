@@ -434,6 +434,74 @@ const BookmarkIcon = () => (
   </svg>
 );
 
+// Returns an array of { tone: "warn" | "info", text } notes for the current
+// eligibility state. Empty when nothing applies.
+function eligibilityNotes({
+  propertyType,
+  residency1,
+  residency2,
+  buyerMode,
+  age1,
+  totalIncome,
+  flatType,
+}) {
+  const notes = [];
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+
+  if (propertyType === "landed") {
+    if (residency1 !== "sc" || (buyerMode === "joint" && residency2 !== "sc")) {
+      notes.push({
+        tone: "warn",
+        text: "Mainland landed property requires Singapore Citizenship. Calculation continues for reference only.",
+      });
+    } else {
+      notes.push({
+        tone: "info",
+        text: "Mainland landed property may only be purchased by Singapore Citizens; Sentosa Cove permits PRs subject to LDAU approval.",
+      });
+    }
+  }
+
+  if (isHdb) {
+    const r1Foreigner = residency1 === "foreigner";
+    const r2Foreigner = buyerMode === "joint" && residency2 === "foreigner";
+    if (r1Foreigner || r2Foreigner) {
+      notes.push({
+        tone: "warn",
+        text: "Foreigners cannot buy HDB. Calculation continues for reference only.",
+      });
+    }
+  }
+
+  if (propertyType === "hdb_bto") {
+    const hasSc =
+      residency1 === "sc" || (buyerMode === "joint" && residency2 === "sc");
+    if (!hasSc) {
+      notes.push({
+        tone: "warn",
+        text: "BTO requires at least one Singapore Citizen.",
+      });
+    }
+    if (buyerMode === "solo" && residency1 === "sc" && age1 < 35) {
+      notes.push({
+        tone: "warn",
+        text: "Singles must be ≥35 to apply for BTO.",
+      });
+    }
+    const ceiling =
+      flatType === "2room" ? 7000 : 14000; // matches BTO_INCOME_CEILINGS in grants.js
+    const monthly = (totalIncome || 0);
+    if (monthly > ceiling) {
+      notes.push({
+        tone: "warn",
+        text: `Household income $${monthly.toLocaleString()}/mo exceeds BTO ceiling ($${ceiling.toLocaleString()}) for this flat type.`,
+      });
+    }
+  }
+
+  return notes;
+}
+
 export default function PrivatePropertyAffordabilityCalculator() {
   const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
@@ -1259,30 +1327,40 @@ export default function PrivatePropertyAffordabilityCalculator() {
                     </button>
                   ))}
                 </div>
-                {propertyType === "landed" && (
-                  (residency1 !== "sc" || residency2 !== "sc") ? (
+                {(() => {
+                  const notes = eligibilityNotes({
+                    propertyType,
+                    residency1,
+                    residency2,
+                    buyerMode,
+                    age1,
+                    totalIncome: income1 + (buyerMode === "joint" ? income2 : 0),
+                    flatType,
+                  });
+                  return notes.map((n, i) => (
                     <p
+                      key={i}
                       className="text-[11px] mt-2 px-3 py-2 leading-relaxed"
-                      style={{
-                        background: "rgba(160,76,45,0.08)",
-                        color: "#A04C2D",
-                        fontFamily: '"Fraunces", serif',
-                        fontStyle: "italic",
-                      }}
+                      style={
+                        n.tone === "warn"
+                          ? {
+                              background: "rgba(160,76,45,0.08)",
+                              color: "#A04C2D",
+                              fontFamily: '"Fraunces", serif',
+                              fontStyle: "italic",
+                            }
+                          : {
+                              fontFamily: '"Fraunces", serif',
+                              fontStyle: "italic",
+                              color: "#57534E",
+                            }
+                      }
                     >
-                      ⚠ Mainland landed property requires Singapore Citizenship.
-                      Calculation continues for reference only.
+                      {n.tone === "warn" ? "⚠ " : ""}
+                      {n.text}
                     </p>
-                  ) : (
-                    <p
-                      className="text-[11px] italic text-stone-600 mt-2 leading-relaxed"
-                      style={{ fontFamily: '"Fraunces", serif' }}
-                    >
-                      Mainland landed property may only be purchased by Singapore
-                      Citizens; Sentosa Cove permits PRs subject to LDAU approval.
-                    </p>
-                  )
-                )}
+                  ));
+                })()}
               </div>
 
               {isHdb && (
