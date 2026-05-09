@@ -1165,16 +1165,16 @@ export default function PrivatePropertyAffordabilityCalculator() {
               color: "#1F2421",
             }}
           >
-            Private Property
+            Singapore Property
             <span style={{ fontStyle: "italic", fontWeight: 300 }}> Affordability</span>
           </h1>
           <p
             className="mt-4 max-w-2xl text-stone-700 text-[15px] leading-relaxed"
             style={{ fontFamily: '"Fraunces", Georgia, serif', fontWeight: 300 }}
           >
-            A complete affordability model accounting for TDSR, LTV tiers, age-weighted
-            tenure rules, BSD &amp; ABSD, plus the cash-versus-CPF split that decides
-            what you can actually buy.
+            Models TDSR, MSR, LTV tiers, BSD &amp; ABSD, CPF Housing Grants, and the
+            cash-versus-CPF split — for private (Condo / Landed) and HDB (BTO / Resale)
+            purchases.
           </p>
         </header>
 

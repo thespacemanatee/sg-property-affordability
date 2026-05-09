@@ -1,6 +1,6 @@
 {
   "name": "sg-property-affordability",
-  "description": "Singapore private property affordability calculator (condo & landed)",
+  "description": "Singapore property affordability calculator — private (condo, landed) and HDB (BTO, resale)",
   "private": true,
   "version": "0.1.0",
   "type": "module",
