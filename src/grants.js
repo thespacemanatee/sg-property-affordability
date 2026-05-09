@@ -68,7 +68,7 @@ export function citizenshipClass({ buyerMode, residency1, residency2 }) {
   // joint
   const set = [residency1, residency2].sort().join("_"); // e.g. "sc_sc", "sc_spr"
   if (set === "sc_sc") return "couple_sc_sc";
-  if (set === "spr_sc" || set === "sc_spr") return "couple_sc_spr";
+  if (set === "sc_spr") return "couple_sc_spr";
   return "ineligible";
 }
 
