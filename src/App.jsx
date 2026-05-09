@@ -502,6 +502,63 @@ function eligibilityNotes({
   return notes;
 }
 
+// Derive loan-mode constraints from (propertyType, loanType).
+// Used to gate stress-rate floor, tenure cap, LTV table, LTV reducibility,
+// and minimum cash requirements.
+function loanParams({ propertyType, loanType }) {
+  const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+  if (!isHdb) {
+    // Private bank loan (existing behaviour).
+    return {
+      stressFloor: 4.0,
+      tenureCap: 35,
+      ltvFirst: 0.75,
+      ltvReducedFirst: 0.55,
+      ltvSecond: 0.45,
+      ltvReducedSecond: 0.25,
+      ltvThird: 0.35,
+      ltvReducedThird: 0.15,
+      ltvReducible: true,
+      minCashFirst: 0.05,
+      minCashFirstReduced: 0.10,
+      minCashOther: 0.25,
+    };
+  }
+  if (loanType === "hdb") {
+    // HDB Concessionary Loan: 75% LTV, no age/tenure reduction, 0% min cash,
+    // 25-year max tenure, 3% stress floor.
+    return {
+      stressFloor: 3.0,
+      tenureCap: 25,
+      ltvFirst: 0.75,
+      ltvReducedFirst: 0.75,
+      ltvSecond: 0.75,
+      ltvReducedSecond: 0.75,
+      ltvThird: 0.75,
+      ltvReducedThird: 0.75,
+      ltvReducible: false,
+      minCashFirst: 0.0,
+      minCashFirstReduced: 0.0,
+      minCashOther: 0.0,
+    };
+  }
+  // HDB bank loan: same LTV table as private (reducible), 5% min cash, 30y cap, 4% floor.
+  return {
+    stressFloor: 4.0,
+    tenureCap: 30,
+    ltvFirst: 0.75,
+    ltvReducedFirst: 0.55,
+    ltvSecond: 0.45,
+    ltvReducedSecond: 0.25,
+    ltvThird: 0.35,
+    ltvReducedThird: 0.15,
+    ltvReducible: true,
+    minCashFirst: 0.05,
+    minCashFirstReduced: 0.05,
+    minCashOther: 0.05,
+  };
+}
+
 export default function PrivatePropertyAffordabilityCalculator() {
   const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
@@ -737,10 +794,16 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const totalFunds = totalCash + totalCPF;
     const totalExistingDebt = existingDebt1 + existingDebt2Eff;
 
+    // Loan-mode constraints (private bank | HDB Concessionary | HDB bank).
+    const params = loanParams({ propertyType, loanType });
+    const effectiveStressRate = Math.max(stressRate, params.stressFloor);
+    const effectiveTenure = Math.min(tenure, params.tenureCap);
+
     // TDSR
     const tdsrCap = 0.55 * totalIncome;
-    const availableForMortgage = Math.max(0, tdsrCap - totalExistingDebt);
-    const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, tenure, stressRate / 100);
+    const availableForMortgageTdsr = Math.max(0, tdsrCap - totalExistingDebt);
+    const availableForMortgage = availableForMortgageTdsr; // MSR layered in Task 7
+    const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, effectiveTenure, effectiveStressRate / 100);
 
     // Income-weighted age (MAS guidance for joint borrowers)
     const weightedAge =
@@ -748,21 +811,23 @@ export default function PrivatePropertyAffordabilityCalculator() {
         ? (age1 * income1 + age2Eff * income2Eff) / totalIncome
         : (age1 + age2Eff) / 2;
 
-    const exceedsAge = weightedAge + tenure > 65;
-    const exceedsTenure = tenure > 30;
-    const reducedLTV = exceedsAge || exceedsTenure;
+    // LTV-reducibility: HDB Concessionary never reduces; private bank and HDB
+    // bank reduce when age+tenure>65 or tenure>30.
+    const exceedsAge = weightedAge + effectiveTenure > 65;
+    const exceedsTenure = effectiveTenure > 30;
+    const reducedLTV = params.ltvReducible && (exceedsAge || exceedsTenure);
 
-    // LTV table (MAS, residential property loans from FIs)
+    // LTV table from loan params.
     let ltv, minCashPct;
     if (propertyOrder === "first") {
-      ltv = reducedLTV ? 0.55 : 0.75;
-      minCashPct = reducedLTV ? 0.1 : 0.05;
+      ltv = reducedLTV ? params.ltvReducedFirst : params.ltvFirst;
+      minCashPct = reducedLTV ? params.minCashFirstReduced : params.minCashFirst;
     } else if (propertyOrder === "second") {
-      ltv = reducedLTV ? 0.25 : 0.45;
-      minCashPct = 0.25;
+      ltv = reducedLTV ? params.ltvReducedSecond : params.ltvSecond;
+      minCashPct = params.minCashOther;
     } else {
-      ltv = reducedLTV ? 0.15 : 0.35;
-      minCashPct = 0.25;
+      ltv = reducedLTV ? params.ltvReducedThird : params.ltvThird;
+      minCashPct = params.minCashOther;
     }
 
     // ABSD: residency × property-order lookup.
@@ -856,8 +921,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const cashDp = minCashPct * p;
     const cpfDp = Math.max(0, downpayment - cashDp);
     const mortStamp = Math.min(500, loan * 0.004);
-    const monthlyAtStress = monthlyPayment(loan, tenure, stressRate / 100);
-    const monthlyAtMarket = monthlyPayment(loan, tenure, marketRate / 100);
+    const monthlyAtStress = monthlyPayment(loan, effectiveTenure, effectiveStressRate / 100);
+    const monthlyAtMarket = monthlyPayment(loan, effectiveTenure, marketRate / 100);
 
     // Effective LTV at the target (loan / price). May be lower than the user's
     // chosen LTV cap when income (TDSR) limits the loan further.
@@ -888,7 +953,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const reverseLoan = isFeasible ? loan : effectiveLTV * p;
     const reverseDp = p - reverseLoan;
     const reverseMortStamp = Math.min(500, reverseLoan * 0.004);
-    const reverseMonthly = monthlyPayment(reverseLoan, tenure, stressRate / 100);
+    const reverseMonthly = monthlyPayment(reverseLoan, effectiveTenure, effectiveStressRate / 100);
     const reverseLTV = p > 0 ? reverseLoan / p : 0;
 
     const reqIncome = (reverseMonthly + totalExistingDebt) / 0.55;
@@ -907,6 +972,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
       tdsrCap,
       availableForMortgage,
       maxLoanTDSR,
+      effectiveTenure,
+      effectiveStressRate,
+      tenureClamped: tenure > params.tenureCap,
+      stressRateClamped: stressRate < params.stressFloor,
+      tenureCap: params.tenureCap,
+      stressFloor: params.stressFloor,
       weightedAge,
       reducedLTV,
       exceedsAge,
@@ -956,6 +1027,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     buyerMode, absdRemission,
     age1, age2, income1, income2, existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
+    propertyType, loanType,
   ]);
 
   const bottleneckLabel = {
@@ -1505,6 +1577,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   <span>30 (max for top LTV)</span>
                   <span>35</span>
                 </div>
+                {c.tenureClamped && (
+                  <p
+                    className="text-[10px] italic text-[#A04C2D] mt-1"
+                    style={{ fontFamily: '"Fraunces", serif' }}
+                  >
+                    Capped at {c.tenureCap}y for this loan type.
+                  </p>
+                )}
               </div>
 
               <div className="mb-5">
