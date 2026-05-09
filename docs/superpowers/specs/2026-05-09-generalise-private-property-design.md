@@ -15,8 +15,7 @@ Joint, each SC / SPR / Foreigner), including mixed-couple ABSD remission for a
 first matrimonial home.
 
 Out of scope: entity/trust buyers, HDB-specific rules (MSR, MOP, HDB LTV),
-free-trade-agreement nationals treated as SC for ABSD, and renaming the GitHub
-repo / Pages URL.
+and free-trade-agreement nationals treated as SC for ABSD.
 
 ## Inputs and UI
 
@@ -109,13 +108,25 @@ Storage:
   the landed-only framing.
 - Component name: `LandedAffordabilityCalculator` →
   `PrivatePropertyAffordabilityCalculator`.
-- `package.json` `name` and `description` updated to match.
+- `package.json` `name` → `sg-property-affordability`, description updated.
+- `package-lock.json` `name` field updated to match (top level + nested).
 - README rewritten to describe a private-property scope, with the ABSD table
   above and a brief note on remission and the Foreigner CPF gate.
 
-The GitHub repo, Pages URL, and `vite.config.js` `base` stay
-`sg-landed-affordability` for this iteration. Renaming forces a Pages URL
-change and invalidates the live link; tracked as a possible follow-up.
+## Repo rename follow-through
+
+The GitHub repo has been renamed to `sg-property-affordability`. All
+in-repo references to the old name must be updated as part of this change:
+
+- `vite.config.js` → `base: "/sg-property-affordability/"`.
+- `README.md` → local dev URL, repo URL examples, and the live Pages URL
+  (`https://thespacemanatee.github.io/sg-property-affordability/`).
+- `package.json` and `package-lock.json` `name` fields.
+- The local working-directory path is still `sg-landed-affordability`, but
+  that is environmental, not in-repo, and is not touched by this change.
+
+After this change, no committed file references the old name. GitHub's
+automatic redirect handles existing clones and the previous Pages URL.
 
 ## Validation and edge cases
 
