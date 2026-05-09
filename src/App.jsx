@@ -392,6 +392,44 @@ const FACTORY_DEFAULTS = {
   absdRemission: false,
 };
 
+// ----- Icons (Lucide-style, inline to avoid a dependency) -----
+// All icons render at the size set via width/height on the parent button's
+// child SVG. They use currentColor so they inherit the button text color.
+
+const iconSvgProps = {
+  width: 18,
+  height: 18,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round",
+  strokeLinejoin: "round",
+  "aria-hidden": true,
+  focusable: false,
+};
+
+const RotateCcwIcon = () => (
+  <svg {...iconSvgProps}>
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>
+);
+
+const LinkIcon = () => (
+  <svg {...iconSvgProps}>
+    <path d="M9 17H7A5 5 0 0 1 7 7h2" />
+    <path d="M15 7h2a5 5 0 1 1 0 10h-2" />
+    <line x1="8" y1="12" x2="16" y2="12" />
+  </svg>
+);
+
+const BookmarkIcon = () => (
+  <svg {...iconSvgProps}>
+    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+  </svg>
+);
+
 export default function PrivatePropertyAffordabilityCalculator() {
   const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
@@ -950,6 +988,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
               style={{ borderColor: "#E5DFCC" }}
             >
               <div
+                role="status"
+                aria-live="polite"
                 className="text-[10px] italic text-stone-500 leading-relaxed"
                 style={{ fontFamily: '"Fraunces", serif' }}
               >
@@ -964,39 +1004,53 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   : "Using factory defaults"}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={resetToFactory}
-                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border hover:bg-[#F4EFE2] transition-colors"
-                  style={{
-                    borderColor: "#D9D2BF",
-                    color: "#6B6357",
-                    fontWeight: 600,
-                  }}
+                <div
+                  role="group"
+                  aria-label="Settings actions"
+                  className="inline-flex items-stretch"
+                  style={{ border: "1px solid #D9D2BF" }}
                 >
-                  Reset
-                </button>
+                  <button
+                    type="button"
+                    onClick={resetToFactory}
+                    aria-label="Reset to factory defaults"
+                    title="Reset to factory defaults"
+                    className="inline-flex items-center justify-center w-9 h-9 hover:bg-[#F4EFE2] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ color: "#6B6357", outlineColor: "#1B4332" }}
+                  >
+                    <RotateCcwIcon />
+                  </button>
+                  <span
+                    aria-hidden="true"
+                    style={{ width: 1, background: "#D9D2BF" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={shareLink}
+                    aria-label="Copy shareable link"
+                    title="Copy shareable link"
+                    className="inline-flex items-center justify-center w-9 h-9 hover:bg-[#F4EFE2] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                    style={{ color: "#6B6357", outlineColor: "#1B4332" }}
+                  >
+                    <LinkIcon />
+                  </button>
+                </div>
                 <button
-                  onClick={shareLink}
-                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border hover:bg-[#F4EFE2] transition-colors"
-                  style={{
-                    borderColor: "#D9D2BF",
-                    color: "#6B6357",
-                    fontWeight: 600,
-                  }}
-                >
-                  Share link
-                </button>
-                <button
+                  type="button"
                   onClick={saveAsDefaults}
-                  className="text-[10px] uppercase tracking-[0.14em] px-2.5 py-1.5 border transition-colors"
+                  aria-label="Save current settings as defaults"
+                  title="Save current settings as defaults"
+                  className="inline-flex items-center gap-1.5 h-9 px-3 text-[10px] uppercase tracking-[0.14em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                   style={{
                     borderColor: "#1B4332",
                     background: "#1B4332",
                     color: "#FAF7EE",
                     fontWeight: 600,
+                    outlineColor: "#1B4332",
                   }}
                 >
-                  Save as defaults
+                  <BookmarkIcon />
+                  Save
                 </button>
               </div>
             </div>
