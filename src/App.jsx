@@ -73,7 +73,7 @@ const formatWithCommas = (val, decimal) => {
   return cleaned === "" ? "" : Number(cleaned).toLocaleString("en-US");
 };
 
-const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = false }) => {
+const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = false, disabled = false }) => {
   // `draft` is the live string while focused. null means not editing — use external `value`.
   const [draft, setDraft] = useState(null);
   const inputRef = useRef(null);
@@ -182,7 +182,7 @@ const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = f
   };
 
   return (
-    <label className="block">
+    <label className={`block ${disabled ? "opacity-50" : ""}`}>
       <div className="flex items-baseline justify-between mb-1.5">
         <span
           className="text-[11px] uppercase tracking-[0.14em] text-stone-600"
@@ -216,7 +216,8 @@ const NumberInput = ({ label, value, onChange, prefix, suffix, hint, decimal = f
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          className="w-full px-3 py-2.5 bg-transparent outline-none text-stone-900 text-base"
+          disabled={disabled}
+          className={`w-full px-3 py-2.5 bg-transparent outline-none text-stone-900 text-base ${disabled ? "cursor-not-allowed" : ""}`}
           style={{
             fontFamily: '"JetBrains Mono", ui-monospace, monospace',
             fontVariantNumeric: "tabular-nums",
@@ -455,7 +456,9 @@ export default function LandedAffordabilityCalculator() {
   const c = useMemo(() => {
     const totalIncome = income1 + income2;
     const totalCash = Math.max(0, cash);
-    const totalCPF = Math.max(0, cpf1 + cpf2);
+    const cpf1Eff = residency1 === "foreigner" ? 0 : cpf1;
+    const cpf2Eff = residency2 === "foreigner" ? 0 : cpf2;
+    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
     const totalFunds = totalCash + totalCPF;
 
     // TDSR
@@ -869,7 +872,14 @@ export default function LandedAffordabilityCalculator() {
                   </p>
                   <NumberInput label="Age" value={age1} onChange={setAge1} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income1} onChange={setIncome1} prefix="S$" />
-                  <NumberInput label="CPF OA" value={cpf1} onChange={setCpf1} prefix="S$" />
+                  <NumberInput
+                    label="CPF OA"
+                    value={cpf1}
+                    onChange={setCpf1}
+                    prefix="S$"
+                    disabled={residency1 === "foreigner"}
+                    hint={residency1 === "foreigner" ? "Foreigners cannot use CPF" : undefined}
+                  />
                   {renderResidencySelect(residency1, setResidency1)}
                 </div>
                 <div className="space-y-3">
@@ -878,7 +888,14 @@ export default function LandedAffordabilityCalculator() {
                   </p>
                   <NumberInput label="Age" value={age2} onChange={setAge2} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income2} onChange={setIncome2} prefix="S$" />
-                  <NumberInput label="CPF OA" value={cpf2} onChange={setCpf2} prefix="S$" />
+                  <NumberInput
+                    label="CPF OA"
+                    value={cpf2}
+                    onChange={setCpf2}
+                    prefix="S$"
+                    disabled={residency2 === "foreigner"}
+                    hint={residency2 === "foreigner" ? "Foreigners cannot use CPF" : undefined}
+                  />
                   {renderResidencySelect(residency2, setResidency2)}
                 </div>
               </div>
