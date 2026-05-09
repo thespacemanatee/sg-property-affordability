@@ -329,7 +329,7 @@ const SHARE_PARAM = "s";
 
 const SHAREABLE_FIELDS = [
   "age1", "income1", "age2", "income2",
-  "existingDebt", "cash", "cpf1", "cpf2",
+  "existingDebt1", "existingDebt2", "cash1", "cash2", "cpf1", "cpf2",
   "tenure", "propertyOrder", "stressRate", "marketRate", "ltvTarget",
   "propertyType", "buyerMode", "residency1", "residency2", "absdRemission",
 ];
@@ -375,8 +375,10 @@ const FACTORY_DEFAULTS = {
   income1: 18000,
   age2: 34,
   income2: 14000,
-  existingDebt: 800,
-  cash: 800000,
+  existingDebt1: 500,
+  existingDebt2: 300,
+  cash1: 500000,
+  cash2: 300000,
   cpf1: 180000,
   cpf2: 140000,
   tenure: 25,
@@ -396,8 +398,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
   const [income1, setIncome1] = useState(FACTORY_DEFAULTS.income1);
   const [age2, setAge2] = useState(FACTORY_DEFAULTS.age2);
   const [income2, setIncome2] = useState(FACTORY_DEFAULTS.income2);
-  const [existingDebt, setExistingDebt] = useState(FACTORY_DEFAULTS.existingDebt);
-  const [cash, setCash] = useState(FACTORY_DEFAULTS.cash);
+  const [existingDebt1, setExistingDebt1] = useState(FACTORY_DEFAULTS.existingDebt1);
+  const [existingDebt2, setExistingDebt2] = useState(FACTORY_DEFAULTS.existingDebt2);
+  const [cash1, setCash1] = useState(FACTORY_DEFAULTS.cash1);
+  const [cash2, setCash2] = useState(FACTORY_DEFAULTS.cash2);
   const [cpf1, setCpf1] = useState(FACTORY_DEFAULTS.cpf1);
   const [cpf2, setCpf2] = useState(FACTORY_DEFAULTS.cpf2);
   const [tenure, setTenure] = useState(FACTORY_DEFAULTS.tenure);
@@ -433,8 +437,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (typeof shared.income1 === "number") setIncome1(shared.income1);
           if (typeof shared.age2 === "number") setAge2(shared.age2);
           if (typeof shared.income2 === "number") setIncome2(shared.income2);
-          if (typeof shared.existingDebt === "number") setExistingDebt(shared.existingDebt);
-          if (typeof shared.cash === "number") setCash(shared.cash);
+          if (typeof shared.existingDebt1 === "number") setExistingDebt1(shared.existingDebt1);
+          else if (typeof shared.existingDebt === "number") { setExistingDebt1(shared.existingDebt); setExistingDebt2(0); }
+          if (typeof shared.existingDebt2 === "number") setExistingDebt2(shared.existingDebt2);
+          if (typeof shared.cash1 === "number") setCash1(shared.cash1);
+          else if (typeof shared.cash === "number") { setCash1(shared.cash); setCash2(0); }
+          if (typeof shared.cash2 === "number") setCash2(shared.cash2);
           if (typeof shared.cpf1 === "number") setCpf1(shared.cpf1);
           if (typeof shared.cpf2 === "number") setCpf2(shared.cpf2);
           if (typeof shared.tenure === "number") setTenure(shared.tenure);
@@ -472,8 +480,12 @@ export default function PrivatePropertyAffordabilityCalculator() {
           if (typeof s.income1 === "number") setIncome1(s.income1);
           if (typeof s.age2 === "number") setAge2(s.age2);
           if (typeof s.income2 === "number") setIncome2(s.income2);
-          if (typeof s.existingDebt === "number") setExistingDebt(s.existingDebt);
-          if (typeof s.cash === "number") setCash(s.cash);
+          if (typeof s.existingDebt1 === "number") setExistingDebt1(s.existingDebt1);
+          else if (typeof s.existingDebt === "number") { setExistingDebt1(s.existingDebt); setExistingDebt2(0); }
+          if (typeof s.existingDebt2 === "number") setExistingDebt2(s.existingDebt2);
+          if (typeof s.cash1 === "number") setCash1(s.cash1);
+          else if (typeof s.cash === "number") { setCash1(s.cash); setCash2(0); }
+          if (typeof s.cash2 === "number") setCash2(s.cash2);
           if (typeof s.cpf1 === "number") setCpf1(s.cpf1);
           if (typeof s.cpf2 === "number") setCpf2(s.cpf2);
           if (typeof s.tenure === "number") setTenure(s.tenure);
@@ -506,7 +518,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
         JSON.stringify({
           buyerMode,
           age1, income1, age2, income2,
-          existingDebt, cash, cpf1, cpf2,
+          existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
           tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget, absdRemission,
         })
       );
@@ -524,8 +536,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     setIncome1(FACTORY_DEFAULTS.income1);
     setAge2(FACTORY_DEFAULTS.age2);
     setIncome2(FACTORY_DEFAULTS.income2);
-    setExistingDebt(FACTORY_DEFAULTS.existingDebt);
-    setCash(FACTORY_DEFAULTS.cash);
+    setExistingDebt1(FACTORY_DEFAULTS.existingDebt1);
+    setExistingDebt2(FACTORY_DEFAULTS.existingDebt2);
+    setCash1(FACTORY_DEFAULTS.cash1);
+    setCash2(FACTORY_DEFAULTS.cash2);
     setCpf1(FACTORY_DEFAULTS.cpf1);
     setCpf2(FACTORY_DEFAULTS.cpf2);
     setTenure(FACTORY_DEFAULTS.tenure);
@@ -552,7 +566,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     try {
       const url = encodeShareUrl({
         age1, income1, age2, income2,
-        existingDebt, cash, cpf1, cpf2,
+        existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
         tenure, propertyOrder, stressRate, marketRate, ltvTarget,
         propertyType, buyerMode, residency1, residency2, absdRemission,
       });
@@ -569,15 +583,18 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const age2Eff = buyerMode === "solo" ? 0 : age2;
     const cpf2Eff = (buyerMode === "solo" || residency2 === "foreigner") ? 0 : cpf2;
     const cpf1Eff = residency1 === "foreigner" ? 0 : cpf1;
+    const cash2Eff = buyerMode === "solo" ? 0 : cash2;
+    const existingDebt2Eff = buyerMode === "solo" ? 0 : existingDebt2;
 
     const totalIncome = income1 + income2Eff;
-    const totalCash = Math.max(0, cash);
+    const totalCash = Math.max(0, cash1 + cash2Eff);
     const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
     const totalFunds = totalCash + totalCPF;
+    const totalExistingDebt = existingDebt1 + existingDebt2Eff;
 
     // TDSR
     const tdsrCap = 0.55 * totalIncome;
-    const availableForMortgage = Math.max(0, tdsrCap - existingDebt);
+    const availableForMortgage = Math.max(0, tdsrCap - totalExistingDebt);
     const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, tenure, stressRate / 100);
 
     // Income-weighted age (MAS guidance for joint borrowers)
@@ -729,7 +746,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const reverseMonthly = monthlyPayment(reverseLoan, tenure, stressRate / 100);
     const reverseLTV = p > 0 ? reverseLoan / p : 0;
 
-    const reqIncome = (reverseMonthly + existingDebt) / 0.55;
+    const reqIncome = (reverseMonthly + totalExistingDebt) / 0.55;
     const reqCashMin = cashDp + cashFees + reverseMortStamp;
     const reqTotalFunds = reverseDp + bsd + absd + cashFees + reverseMortStamp;
 
@@ -778,6 +795,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
       totalCash,
       totalCPF,
       totalFunds,
+      totalExistingDebt,
       reqIncome,
       reqCashMin,
       reqTotalFunds,
@@ -791,7 +809,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     };
   }, [
     buyerMode, absdRemission,
-    age1, age2, income1, income2, existingDebt, cash, cpf1, cpf2,
+    age1, age2, income1, income2, existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
   ]);
 
@@ -883,7 +901,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
         }
       `}</style>
 
-      <div className="max-w-6xl mx-auto px-5 py-10 md:py-14">
+      <div className="max-w-[1400px] mx-auto px-5 py-10 md:py-14">
         {/* Header */}
         <header className="mb-10 md:mb-14">
           <div className="flex items-center gap-2 mb-3">
@@ -1066,21 +1084,47 @@ export default function PrivatePropertyAffordabilityCalculator() {
               >
                 ② Resources &amp; Obligations
               </h2>
-              <div className="space-y-3">
-                <NumberInput
-                  label="Cash savings (combined)"
-                  value={cash}
-                  onChange={setCash}
-                  prefix="S$"
-                  hint="for downpayment, BSD, fees"
-                />
-                <NumberInput
-                  label="Existing monthly debts"
-                  value={existingDebt}
-                  onChange={setExistingDebt}
-                  prefix="S$"
-                  hint="car loans, credit cards"
-                />
+              <div className={buyerMode === "solo" ? "" : "grid grid-cols-2 gap-4"}>
+                <div className="space-y-3">
+                  <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
+                    {buyerMode === "solo" ? "Buyer" : "Spouse 1"}
+                  </p>
+                  <NumberInput
+                    label="Cash savings"
+                    value={cash1}
+                    onChange={setCash1}
+                    prefix="S$"
+                    hint="for downpayment, BSD, fees"
+                  />
+                  <NumberInput
+                    label="Existing monthly debts"
+                    value={existingDebt1}
+                    onChange={setExistingDebt1}
+                    prefix="S$"
+                    hint="car loans, credit cards"
+                  />
+                </div>
+                {buyerMode === "joint" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
+                      Spouse 2
+                    </p>
+                    <NumberInput
+                      label="Cash savings"
+                      value={cash2}
+                      onChange={setCash2}
+                      prefix="S$"
+                      hint="for downpayment, BSD, fees"
+                    />
+                    <NumberInput
+                      label="Existing monthly debts"
+                      value={existingDebt2}
+                      onChange={setExistingDebt2}
+                      prefix="S$"
+                      hint="car loans, credit cards"
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1476,7 +1520,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
               <div className="space-y-3">
                 <ComparisonRow
                   label="Combined gross income"
-                  sublabel={`covers ${fmt(c.reverseMonthly + existingDebt)}/mo of debt @ 55% TDSR`}
+                  sublabel={`covers ${fmt(c.reverseMonthly + c.totalExistingDebt)}/mo of debt @ 55% TDSR`}
                   required={c.reqIncome}
                   have={c.totalIncome}
                   suffix=" / mo"
