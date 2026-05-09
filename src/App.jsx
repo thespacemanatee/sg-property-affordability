@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { computeGrants } from "./grants";
 
 // ----- Calculation helpers -----
 
@@ -788,9 +789,20 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const cash2Eff = buyerMode === "solo" ? 0 : cash2;
     const existingDebt2Eff = buyerMode === "solo" ? 0 : existingDebt2;
 
+    const grants = computeGrants({
+      propertyType,
+      buyerMode,
+      residency1,
+      residency2,
+      age1,
+      householdMonthlyIncome: income1 + (buyerMode === "joint" ? income2 : 0),
+      firstTimer,
+      proximity,
+    });
+
     const totalIncome = income1 + income2Eff;
     const totalCash = Math.max(0, cash1 + cash2Eff);
-    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
+    const totalCPF = Math.max(0, cpf1Eff + cpf2Eff + grants.total);
     const totalFunds = totalCash + totalCPF;
     const totalExistingDebt = existingDebt1 + existingDebt2Eff;
 
@@ -1030,12 +1042,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
       canAfford,
       msrBinds,
       msrCap,
+      grants,
     };
   }, [
-    buyerMode, absdRemission,
-    age1, age2, income1, income2, existingDebt1, existingDebt2, cash1, cash2, cpf1, cpf2,
+    age1, age2, income1, income2, existingDebt1, existingDebt2,
+    cash1, cash2, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
-    propertyType, loanType,
+    buyerMode, absdRemission, propertyType, loanType,
+    firstTimer, flatType, proximity,
   ]);
 
   const bottleneckLabel = {
