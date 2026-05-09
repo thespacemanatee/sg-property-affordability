@@ -439,6 +439,7 @@ const BookmarkIcon = () => (
 // eligibility state. Empty when nothing applies.
 function eligibilityNotes({
   propertyType,
+  loanType,
   residency1,
   residency2,
   buyerMode,
@@ -495,6 +496,20 @@ function eligibilityNotes({
       notes.push({
         tone: "warn",
         text: `Household income $${monthly.toLocaleString()}/mo exceeds BTO ceiling ($${ceiling.toLocaleString()}) for this flat type.`,
+      });
+    }
+  }
+
+  // HDB Concessionary Loan has its own income ceiling. For BTO this overlaps
+  // with the BTO ceiling (already warned above); surface separately for Resale
+  // so users picking HDB loan see the constraint.
+  if (propertyType === "hdb_resale" && loanType === "hdb") {
+    const ceiling = BTO_INCOME_CEILINGS[flatType] ?? 14000;
+    const monthly = (totalIncome || 0);
+    if (monthly > ceiling) {
+      notes.push({
+        tone: "warn",
+        text: `HDB Concessionary loan requires household income ≤ $${ceiling.toLocaleString()}/mo for this flat type. Switch to bank loan or reduce income to qualify.`,
       });
     }
   }
@@ -590,6 +605,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
   const [proximity, setProximity] = useState(FACTORY_DEFAULTS.proximity);
 
   const isHdb = propertyType === "hdb_bto" || propertyType === "hdb_resale";
+
+  // Clamp tenure to the active loan-mode cap. Switching from a 35y private
+  // mode to a 25y HDB Concessionary mode should pull the slider down rather
+  // than leak a stale value.
+  useEffect(() => {
+    const cap = loanParams({ propertyType, loanType }).tenureCap;
+    if (tenure > cap) setTenure(cap);
+  }, [propertyType, loanType, tenure]);
 
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
@@ -807,7 +830,14 @@ export default function PrivatePropertyAffordabilityCalculator() {
 
     // Loan-mode constraints (private bank | HDB Concessionary | HDB bank).
     const params = loanParams({ propertyType, loanType });
-    const effectiveStressRate = Math.max(stressRate, params.stressFloor);
+    const isHdbConcessionary = isHdb && loanType === "hdb";
+    // HDB Concessionary uses fixed published rates: stress floor 3% and market
+    // rate 2.6% (CPF OA + 0.1%). For private bank and HDB bank, use the user's
+    // inputs (with the stress floor as a soft minimum).
+    const effectiveStressRate = isHdbConcessionary
+      ? params.stressFloor
+      : Math.max(stressRate, params.stressFloor);
+    const effectiveMarketRate = isHdbConcessionary ? 2.6 : marketRate;
     const effectiveTenure = Math.min(tenure, params.tenureCap);
 
     // TDSR
@@ -941,7 +971,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
     const cpfDp = Math.max(0, downpayment - cashDp);
     const mortStamp = Math.min(500, loan * 0.004);
     const monthlyAtStress = monthlyPayment(loan, effectiveTenure, effectiveStressRate / 100);
-    const monthlyAtMarket = monthlyPayment(loan, effectiveTenure, marketRate / 100);
+    const monthlyAtMarket = monthlyPayment(loan, effectiveTenure, effectiveMarketRate / 100);
 
     // Effective LTV at the target (loan / price). May be lower than the user's
     // chosen LTV cap when income (TDSR) limits the loan further.
@@ -993,8 +1023,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
       maxLoanTDSR,
       effectiveTenure,
       effectiveStressRate,
-      tenureClamped: tenure > params.tenureCap,
-      stressRateClamped: stressRate < params.stressFloor,
+      effectiveMarketRate,
+      isHdbConcessionary,
       tenureCap: params.tenureCap,
       stressFloor: params.stressFloor,
       weightedAge,
@@ -1426,6 +1456,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 {(() => {
                   const notes = eligibilityNotes({
                     propertyType,
+                    loanType,
                     residency1,
                     residency2,
                     buyerMode,
@@ -1590,7 +1621,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 <input
                   type="range"
                   min="5"
-                  max="35"
+                  max={c.tenureCap}
                   step="1"
                   value={tenure}
                   onChange={(e) => setTenure(Number(e.target.value))}
@@ -1598,17 +1629,15 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 />
                 <div className="flex justify-between text-[10px] text-stone-500 mt-1">
                   <span>5</span>
-                  <span>30 (max for top LTV)</span>
-                  <span>35</span>
+                  {c.tenureCap >= 35 ? (
+                    <>
+                      <span>30 (max for top LTV)</span>
+                      <span>{c.tenureCap}</span>
+                    </>
+                  ) : (
+                    <span>{c.tenureCap}</span>
+                  )}
                 </div>
-                {c.tenureClamped && (
-                  <p
-                    className="text-[10px] italic text-[#A04C2D] mt-1"
-                    style={{ fontFamily: '"Fraunces", serif' }}
-                  >
-                    Capped at {c.tenureCap}y for this loan type.
-                  </p>
-                )}
               </div>
 
               <div className="mb-5">
@@ -1673,23 +1702,34 @@ export default function PrivatePropertyAffordabilityCalculator() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-5">
-                <NumberInput
-                  label="Stress test rate"
-                  value={stressRate}
-                  onChange={setStressRate}
-                  suffix="%"
-                  hint="MAS floor: 4%"
-                  decimal
-                />
-                <NumberInput
-                  label="Market rate (illustrative)"
-                  value={marketRate}
-                  onChange={setMarketRate}
-                  suffix="%"
-                  decimal
-                />
-              </div>
+              {!c.isHdbConcessionary && (
+                <div className="grid grid-cols-2 gap-4 mb-5">
+                  <NumberInput
+                    label="Stress test rate"
+                    value={stressRate}
+                    onChange={setStressRate}
+                    suffix="%"
+                    hint={`MAS floor: ${c.stressFloor}%`}
+                    decimal
+                  />
+                  <NumberInput
+                    label="Market rate (illustrative)"
+                    value={marketRate}
+                    onChange={setMarketRate}
+                    suffix="%"
+                    decimal
+                  />
+                </div>
+              )}
+              {c.isHdbConcessionary && (
+                <p
+                  className="text-[11px] italic text-stone-600 mb-5 leading-relaxed"
+                  style={{ fontFamily: '"Fraunces", serif' }}
+                >
+                  HDB Concessionary loan uses fixed rates: stress test {c.stressFloor}%,
+                  current loan rate {c.effectiveMarketRate}% (CPF OA + 0.1%).
+                </p>
+              )}
 
               {propertyType !== "hdb_bto" && (
                 <div>
@@ -2221,7 +2261,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   className="text-[10px] uppercase tracking-[0.2em] text-stone-600 mb-1"
                   style={{ fontWeight: 600 }}
                 >
-                  Monthly @ {stressRate}%
+                  Monthly @ {c.effectiveStressRate}%
                 </div>
                 <div
                   style={{
@@ -2245,7 +2285,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   className="text-[10px] uppercase tracking-[0.2em] mb-1"
                   style={{ fontWeight: 600, color: "#1B4332" }}
                 >
-                  Monthly @ {marketRate}%
+                  Monthly @ {c.effectiveMarketRate}%
                 </div>
                 <div
                   style={{
