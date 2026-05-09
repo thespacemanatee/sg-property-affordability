@@ -343,6 +343,7 @@ const FACTORY_DEFAULTS = {
   stressRate: 4.0,
   marketRate: 3.25,
   ltvTarget: null,
+  absdRemission: false,
 };
 
 export default function LandedAffordabilityCalculator() {
@@ -367,6 +368,7 @@ export default function LandedAffordabilityCalculator() {
   // User's chosen loan-to-value cap (0–regulatory max). null = take the
   // regulatory maximum. Lower it to take a smaller loan and deploy more cash.
   const [ltvTarget, setLtvTarget] = useState(FACTORY_DEFAULTS.ltvTarget);
+  const [absdRemission, setAbsdRemission] = useState(FACTORY_DEFAULTS.absdRemission);
 
   // Persistence: load saved defaults on mount, expose save/reset actions.
   const [hydrated, setHydrated] = useState(false);
@@ -398,6 +400,7 @@ export default function LandedAffordabilityCalculator() {
           if (typeof s.marketRate === "number") setMarketRate(s.marketRate);
           if (s.ltvTarget === null || typeof s.ltvTarget === "number")
             setLtvTarget(s.ltvTarget);
+          if (typeof s.absdRemission === "boolean") setAbsdRemission(s.absdRemission);
           setSavedHasDefaults(true);
         }
       } catch (err) {
@@ -418,7 +421,7 @@ export default function LandedAffordabilityCalculator() {
           buyerMode,
           age1, income1, age2, income2,
           existingDebt, cash, cpf1, cpf2,
-          tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget,
+          tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget, absdRemission,
         })
       );
       setSavedHasDefaults(true);
@@ -447,6 +450,7 @@ export default function LandedAffordabilityCalculator() {
     setStressRate(FACTORY_DEFAULTS.stressRate);
     setMarketRate(FACTORY_DEFAULTS.marketRate);
     setLtvTarget(FACTORY_DEFAULTS.ltvTarget);
+    setAbsdRemission(FACTORY_DEFAULTS.absdRemission);
     setTargetOverride(null);
     try {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -503,7 +507,7 @@ export default function LandedAffordabilityCalculator() {
       residency1,
       residency2,
       propertyOrder,
-      remission: false,
+      remission: absdRemission,
     });
 
     const maxPriceFromLoan = maxLoanTDSR / ltv;
@@ -684,7 +688,7 @@ export default function LandedAffordabilityCalculator() {
       canAfford,
     };
   }, [
-    buyerMode,
+    buyerMode, absdRemission,
     age1, age2, income1, income2, existingDebt, cash, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
   ]);
@@ -1174,6 +1178,20 @@ export default function LandedAffordabilityCalculator() {
                     </button>
                   ))}
                 </div>
+                {isRemissionEligible({ buyerMode, residency1, residency2, propertyOrder }) && (
+                  <label className="flex items-start gap-2 mt-3 text-[12px] text-stone-700 leading-relaxed cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={absdRemission}
+                      onChange={(e) => setAbsdRemission(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span style={{ fontFamily: '"Fraunces", serif', fontStyle: "italic" }}>
+                      First matrimonial home — apply mixed-couple ABSD remission
+                      (uses the SC rate)
+                    </span>
+                  </label>
+                )}
               </div>
             </div>
           </section>
