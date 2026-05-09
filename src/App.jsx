@@ -326,6 +326,7 @@ function effectiveAbsdRate({ buyerMode, residency1, residency2, propertyOrder, r
 
 const STORAGE_KEY = "landed_affordability_defaults_v1";
 const FACTORY_DEFAULTS = {
+  buyerMode: "joint",
   age1: 35,
   income1: 18000,
   age2: 34,
@@ -345,6 +346,7 @@ const FACTORY_DEFAULTS = {
 };
 
 export default function LandedAffordabilityCalculator() {
+  const [buyerMode, setBuyerMode] = useState(FACTORY_DEFAULTS.buyerMode);
   const [age1, setAge1] = useState(FACTORY_DEFAULTS.age1);
   const [income1, setIncome1] = useState(FACTORY_DEFAULTS.income1);
   const [age2, setAge2] = useState(FACTORY_DEFAULTS.age2);
@@ -378,6 +380,7 @@ export default function LandedAffordabilityCalculator() {
         const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
         if (!cancelled && raw) {
           const s = JSON.parse(raw);
+          if (typeof s.buyerMode === "string") setBuyerMode(s.buyerMode);
           if (typeof s.age1 === "number") setAge1(s.age1);
           if (typeof s.income1 === "number") setIncome1(s.income1);
           if (typeof s.age2 === "number") setAge2(s.age2);
@@ -412,6 +415,7 @@ export default function LandedAffordabilityCalculator() {
       window.localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
+          buyerMode,
           age1, income1, age2, income2,
           existingDebt, cash, cpf1, cpf2,
           tenure, propertyOrder, propertyType, residency1, residency2, stressRate, marketRate, ltvTarget,
@@ -426,6 +430,7 @@ export default function LandedAffordabilityCalculator() {
   };
 
   const resetToFactory = async () => {
+    setBuyerMode(FACTORY_DEFAULTS.buyerMode);
     setAge1(FACTORY_DEFAULTS.age1);
     setIncome1(FACTORY_DEFAULTS.income1);
     setAge2(FACTORY_DEFAULTS.age2);
@@ -454,10 +459,13 @@ export default function LandedAffordabilityCalculator() {
   };
 
   const c = useMemo(() => {
-    const totalIncome = income1 + income2;
-    const totalCash = Math.max(0, cash);
+    const income2Eff = buyerMode === "solo" ? 0 : income2;
+    const age2Eff = buyerMode === "solo" ? 0 : age2;
+    const cpf2Eff = (buyerMode === "solo" || residency2 === "foreigner") ? 0 : cpf2;
     const cpf1Eff = residency1 === "foreigner" ? 0 : cpf1;
-    const cpf2Eff = residency2 === "foreigner" ? 0 : cpf2;
+
+    const totalIncome = income1 + income2Eff;
+    const totalCash = Math.max(0, cash);
     const totalCPF = Math.max(0, cpf1Eff + cpf2Eff);
     const totalFunds = totalCash + totalCPF;
 
@@ -469,8 +477,8 @@ export default function LandedAffordabilityCalculator() {
     // Income-weighted age (MAS guidance for joint borrowers)
     const weightedAge =
       totalIncome > 0
-        ? (age1 * income1 + age2 * income2) / totalIncome
-        : (age1 + age2) / 2;
+        ? (age1 * income1 + age2Eff * income2Eff) / totalIncome
+        : (age1 + age2Eff) / 2;
 
     const exceedsAge = weightedAge + tenure > 65;
     const exceedsTenure = tenure > 30;
@@ -491,7 +499,7 @@ export default function LandedAffordabilityCalculator() {
 
     // ABSD: residency × property-order lookup.
     const absdRate = effectiveAbsdRate({
-      buyerMode: "joint",
+      buyerMode,
       residency1,
       residency2,
       propertyOrder,
@@ -676,6 +684,7 @@ export default function LandedAffordabilityCalculator() {
       canAfford,
     };
   }, [
+    buyerMode,
     age1, age2, income1, income2, existingDebt, cash, cpf1, cpf2,
     tenure, propertyOrder, residency1, residency2, stressRate, marketRate, targetOverride, ltvTarget,
   ]);
@@ -855,20 +864,48 @@ export default function LandedAffordabilityCalculator() {
               </div>
             </div>
 
+            <div className="-mt-2">
+              <div
+                className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                style={{ fontWeight: 500 }}
+              >
+                Buyer Mode
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { v: "solo", label: "Solo" },
+                  { v: "joint", label: "Joint" },
+                ].map((o) => (
+                  <button
+                    key={o.v}
+                    onClick={() => setBuyerMode(o.v)}
+                    className="py-2 px-2 text-center transition-colors border"
+                    style={{
+                      background: buyerMode === o.v ? "#1B4332" : "#FAF7EE",
+                      color: buyerMode === o.v ? "#FAF7EE" : "#1F2421",
+                      borderColor: buyerMode === o.v ? "#1B4332" : "#D9D2BF",
+                    }}
+                  >
+                    <div className="text-sm font-semibold">{o.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div>
               <div className="flex items-baseline justify-between mb-4">
                 <h2
                   className="text-[11px] uppercase tracking-[0.2em]"
                   style={{ fontWeight: 600, color: "#1B4332" }}
                 >
-                  ① The Couple
+                  {buyerMode === "solo" ? "① The Buyer" : "① The Couple"}
                 </h2>
                 <span className="text-xs text-stone-500">Income-weighted age</span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className={buyerMode === "solo" ? "" : "grid grid-cols-2 gap-4"}>
                 <div className="space-y-3">
                   <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
-                    Spouse 1
+                    {buyerMode === "solo" ? "Buyer" : "Spouse 1"}
                   </p>
                   <NumberInput label="Age" value={age1} onChange={setAge1} suffix="yrs" />
                   <NumberInput label="Gross Income / mo" value={income1} onChange={setIncome1} prefix="S$" />
@@ -882,6 +919,7 @@ export default function LandedAffordabilityCalculator() {
                   />
                   {renderResidencySelect(residency1, setResidency1)}
                 </div>
+                {buyerMode === "joint" && (
                 <div className="space-y-3">
                   <p className="text-xs text-stone-600 italic" style={{ fontFamily: '"Fraunces", serif' }}>
                     Spouse 2
@@ -898,6 +936,7 @@ export default function LandedAffordabilityCalculator() {
                   />
                   {renderResidencySelect(residency2, setResidency2)}
                 </div>
+                )}
               </div>
             </div>
 
