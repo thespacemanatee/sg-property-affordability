@@ -2160,6 +2160,54 @@ export default function PrivatePropertyAffordabilityCalculator() {
                   </div>
                 </div>
               </div>
+              {c.grants.total > 0 && (
+                <div className="mt-4 pt-4 border-t" style={{ borderColor: "#D9D2BF" }}>
+                  <div
+                    className="text-[11px] uppercase tracking-[0.14em] text-stone-600 mb-2"
+                    style={{ fontWeight: 500 }}
+                  >
+                    CPF Housing Grants
+                  </div>
+                  <div className="space-y-1 text-[13px]">
+                    {[
+                      ["EHG (Enhanced CPF Housing Grant)", c.grants.ehg],
+                      ["Family Grant", c.grants.familyGrant],
+                      ["Proximity Housing Grant", c.grants.phg],
+                      ["Singles Grant", c.grants.singlesGrant],
+                    ].filter(([, v]) => v > 0).map(([label, v]) => (
+                      <div key={label} className="flex justify-between">
+                        <span className="text-stone-700">{label}</span>
+                        <span
+                          style={{
+                            fontFamily: '"JetBrains Mono", monospace',
+                            fontVariantNumeric: "tabular-nums",
+                            color: "#1B4332",
+                            fontWeight: 600,
+                          }}
+                        >
+                          {fmt(v)}
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between pt-1 mt-1 border-t" style={{ borderColor: "#D9D2BF" }}>
+                      <span className="text-stone-700 font-semibold">Total grants</span>
+                      <span
+                        style={{
+                          fontFamily: '"JetBrains Mono", monospace',
+                          fontVariantNumeric: "tabular-nums",
+                          color: "#1B4332",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {fmt(c.grants.total)}
+                      </span>
+                    </div>
+                    <p className="text-[10px] italic text-stone-500 mt-1" style={{ fontFamily: '"Fraunces", serif' }}>
+                      Grants are paid into CPF OA at completion and offset CPF requirements (not cash).
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Monthly */}
