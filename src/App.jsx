@@ -802,7 +802,10 @@ export default function PrivatePropertyAffordabilityCalculator() {
     // TDSR
     const tdsrCap = 0.55 * totalIncome;
     const availableForMortgageTdsr = Math.max(0, tdsrCap - totalExistingDebt);
-    const availableForMortgage = availableForMortgageTdsr; // MSR layered in Task 7
+    // MSR (HDB only): 30% of gross household income caps the monthly mortgage.
+    const msrCap = isHdb ? 0.30 * totalIncome : Infinity;
+    const availableForMortgage = Math.min(availableForMortgageTdsr, msrCap);
+    const msrBinds = isHdb && msrCap < availableForMortgageTdsr;
     const maxLoanTDSR = maxLoanFromPayment(availableForMortgage, effectiveTenure, effectiveStressRate / 100);
 
     // Income-weighted age (MAS guidance for joint borrowers)
@@ -890,7 +893,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
 
     let bottleneck;
     if (cashFloorBinds) bottleneck = "cash";
-    else if (fundsBinds && incomeAtCapAtMax) bottleneck = "income+funds";
+    else if (fundsBinds && incomeAtCapAtMax) bottleneck = msrBinds ? "msr+funds" : "income+funds";
     else if (fundsBinds) bottleneck = "funds";
     else bottleneck = "funds";
 
@@ -1022,6 +1025,8 @@ export default function PrivatePropertyAffordabilityCalculator() {
       cashGap,
       fundsGap,
       canAfford,
+      msrBinds,
+      msrCap,
     };
   }, [
     buyerMode, absdRemission,
@@ -1032,6 +1037,7 @@ export default function PrivatePropertyAffordabilityCalculator() {
 
   const bottleneckLabel = {
     "income+funds": "Income + cash/CPF",
+    "msr+funds": "Limited by MSR + funds",
     cash: "Minimum cash downpayment",
     funds: "Total cash + CPF",
   }[c.bottleneck] || "Total cash + CPF";
